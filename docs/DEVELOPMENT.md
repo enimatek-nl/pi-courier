@@ -220,7 +220,7 @@ pi 0.83.0 就绪。
 - 交接卡(issue #122):SlashCommandContext 的 `recap` 缝(run/beforeNew/onSwitched)——/recap 忙拒(isStreaming)与空会话拒(轮数 <2)以类型化错误抛给命令层转人话;生成 = 向当前进程发总结 prompt 并在 turn_end 捕获终答(卡片替代原生回复不重复刷屏;卡片按 splitMessage 分片);/new //clear 前的自动出卡(recap.onNew 默认关)失败只 warn 绝不阻塞;多工程下抄送管理房(项目名前缀);轮数记账 WeakMap,换会话归零
 - 审计 trails(issue #124):`auditTrail` 统一记账口,八处接线(配对成败/trusted/revoke 经 admin-commands 纯模块返回的 `audit` 裁决字段;`!` `/bash` `/bashstop` `/reload` 按 slashCommands/bashBang 的命令名;`/login` 家族;`/pmctl rm`;queue.clear 走命令层的 audit 缝按真实语义上报;backlog.execute 在 执行 放行处)——登记表 `AUDIT_EVENTS` 集中常量,漏登记=快照测试红
 - 模型降级链(issue #121):turn_end 的 `stopReason==="error"` 喂 per-rpc 连败计数(其余轮次清零,工具循环中间轮算成功),连败 2 轮触发自动 `setModel` 沿链推进(项目房 `projectFallbacks` > 全局 `modelFallbackChain`,链空=功能关逐字节回归);回执带 from→to 与手动切回提示,审计 `model.fallback`(actor=system);链耗尽只提示一次(exhaustedNotified,成功轮重武装);切换失败(setModel 抛)发切换失败回执不计审计;计数 WeakMap 仅内存,重启归零可接受
-- typing 指示:`agent_start` / `turn_start` 触发 Matrix 输入中状态;管理房判定走 config 的 `managementRoomId` 派生、收养写走 `adoptManagementRoom`(spec #99/#102),收养品牌逻辑在 space.ts
+- typing 指示:`agent_start` / `turn_start` 触发 Matrix 输入中状态;工具流关闭的房间由事件流 5s 节流续期,另由回合期间的 7s 心跳定时器兜住——Matrix typing 只活 10s,长跑工具调用期间不产生事件,光靠事件续期会在十分后无声消失(issue #363);turn_end / 会话重启 / 本房改回活卡均主动停心跳;管理房判定走 config 的 `managementRoomId` 派生、收养写走 `adoptManagementRoom`(spec #99/#102),收养品牌逻辑在 space.ts
 
 **`src/rpc/queue-snapshots.ts`** —— 队列快照存储 + 启动消费(issue #115 阶段2)
 - `QueueSnapshotStore` 包在 JsonStateFile 上:按房间 replace-or-insert,空快照=移除(队列在任何活进程都不存在了,下次启动不得复活成丢失报告),残缺条目装载时静默跳过(与附件账本同一降级契约)

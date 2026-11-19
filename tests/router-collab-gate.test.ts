@@ -439,6 +439,67 @@ describe("roomToolsToggle × typing 续期 (spec #299 票06)", () => {
       vi.useRealTimers();
     }
   });
+
+  // 打字表活的心跳(issue #363):Matrix 的 typing 只维持 10s(transport 传
+  // 的就是 10000ms),而续期过去只挂在 agent 事件上 —— 一次跑十分钟的
+  // `go test` 期间没有任何事件,房间里的"正在输入…"十秒后就没了,使用者
+  // 无从判断 bot 是干活还是掉了。心跳按时间续,不看事件。
+  it("typing keeps beating through a silent stretch of the turn and stops at turn_end", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1_000_000);
+    try {
+      const fx = makeCollabFixture(ENABLED);
+      mapRoom(fx, "owner");
+      const typing = fx.deps.sendTyping as ReturnType<typeof vi.fn>;
+      const beats = () => typing.mock.calls.filter((call) => call[2] === true).length;
+
+      await fx.router.handleIncoming(makeMsg(GROUP)); // 绑定回复目标
+      fx.router.handleEvent({ type: "turn_start" }, fx.rpc);
+      expect(beats()).toBe(1); // turn_start 首拍
+
+      // 一分钟的死寂(工具调用在跑,无事件):typing 不能断。
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(beats()).toBeGreaterThanOrEqual(1 + Math.floor(60_000 / 7_000));
+
+      // 回合结束:停止心跳,之后不再有任何续期。
+      fx.router.handleEvent(
+        { type: "turn_end", message: { content: [{ type: "text", text: "done" }] } } as never,
+        fx.rpc
+      );
+      const callsAtEnd = typing.mock.calls.length;
+      expect(typing).toHaveBeenLastCalledWith("!room:server", "matrix", false);
+      await vi.advanceTimersByTimeAsync(120_000);
+      expect(typing).toHaveBeenCalledTimes(callsAtEnd);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("the heartbeat stops when a room turns its tool stream back on mid-turn", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1_000_000);
+    try {
+      const fx = makeCollabFixture(ENABLED);
+      mapRoom(fx, "owner");
+      const typing = fx.deps.sendTyping as ReturnType<typeof vi.fn>;
+      await fx.router.handleIncoming(makeMsg(GROUP));
+      fx.router.handleEvent({ type: "turn_start" }, fx.rpc);
+
+      // 活卡回来(本房显式 on,且活卡缝齐备):typing 让位给卡片,心跳收摊。
+      fx.deps.sendLiveCard = vi.fn();
+      fx.deps.editReply = vi.fn();
+      (fx.projectManager as unknown as Record<string, ReturnType<typeof vi.fn>>).showToolCallsForRoom = vi
+        .fn()
+        .mockReturnValue("on");
+      await vi.advanceTimersByTimeAsync(20_000);
+      const callsAfterFlip = typing.mock.calls.length;
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(typing).toHaveBeenCalledTimes(callsAfterFlip);
+      expect(typing).toHaveBeenLastCalledWith("!room:server", "matrix", false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 describe("room-level command broadcast (spec #299 票07)", () => {

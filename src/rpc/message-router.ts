@@ -696,6 +696,54 @@ export function createMessageRouter(deps: MessageRouterDeps): MessageRouter {
   const sendTypingSafe = (chatId: string, transport: string, active = true): void => {
     void Promise.resolve(sendTyping(chatId, transport, active)).catch(() => {});
   };
+
+  /**
+   * 打字表活的心跳(issue #363)。Matrix 的 typing 状态只活 10s(见 transport
+   * 的 `setTyping(..., 10000)`),而事件驱动的续期挂在 agent 事件上 —— 一次
+   * 跑十分钟的构建或测试期间不产生任何事件,"正在输入…"十秒后就消失,房间
+   * 里的人无从判断 bot 是在干活还是掉了。心跳按时间走:回合期间每 7s 一拍,
+   * turn_end / 会话重启 / 本房改回活卡模式即停。
+   *
+   * XOR 不变(票06):活卡模式的心跳在 tick 里自灭 —— 进度表达要么是一张
+   * 活卡,要么是 typing,不同时两个。硬上限只是兼带保险(turn_end 万一没来,
+   * 不允许一个房间永久顶在"正在输入…")。
+   */
+  const TYPING_HEARTBEAT_MS = 7_000;
+  const TYPING_HEARTBEAT_MAX_MS = 30 * 60_000;
+  const typingBeats = new Map<string, { transport: string; sinceMs: number }>();
+  let typingBeatTimer: ReturnType<typeof setInterval> | undefined;
+
+  const stopTypingBeat = (chatId: string, announceStop = false): void => {
+    const room = typingBeats.get(chatId);
+    if (room === undefined) return;
+    typingBeats.delete(chatId);
+    if (typingBeats.size === 0 && typingBeatTimer !== undefined) {
+      clearInterval(typingBeatTimer);
+      typingBeatTimer = undefined;
+    }
+    if (announceStop) sendTypingSafe(chatId, room.transport, false);
+  };
+
+  const typingBeatTick = (): void => {
+    for (const [chatId, room] of [...typingBeats]) {
+      if (Date.now() - room.sinceMs > TYPING_HEARTBEAT_MAX_MS) {
+        stopTypingBeat(chatId, true);
+      } else if (roomToolCallsMode(chatId) === "off") {
+        lastTypingRenewalAt.set(chatId, Date.now());
+        sendTypingSafe(chatId, room.transport);
+      } else {
+        // 本房回合中途改回活卡:卡片接手进度,typing 退场。
+        stopTypingBeat(chatId, true);
+      }
+    }
+  };
+
+  const startTypingBeat = (chatId: string, transport: string): void => {
+    typingBeats.set(chatId, { transport, sinceMs: Date.now() });
+    if (typingBeatTimer === undefined) typingBeatTimer = setInterval(typingBeatTick, TYPING_HEARTBEAT_MS);
+    // 心跳是附属信息,不该成为撑住事件循环的理由(CLI 退出等)。
+    typingBeatTimer.unref?.();
+  };
   // 票08(spec #299):重启缺口声明簿记 —— 每房每进程生命周期声明一次。
   const bootedAt = new Date();
   const restartGapDeclared = new Set<string>();
@@ -1585,11 +1633,16 @@ export function createMessageRouter(deps: MessageRouterDeps): MessageRouter {
       // 的降级链永久静默。键控 once(#354):同 rpc 只登记一次,子进程回来
       // 即 clear() 把重试标记与连败一并归零。
       restartHooks.once(rpc, "fallback-streak", () => fallbackStreak.clear(rpc));
+      // 会话重启 = 在途回合不会再有 turn_end:收摊全部 typing 心跳。
+      restartHooks.once(rpc, "typing-beat", () => {
+        for (const chatId of [...typingBeats.keys()]) stopTypingBeat(chatId);
+      });
 
       // 票06(spec #299):工具流关闭的房间,回合期间以原生 typing 续期表活
       // (5s 节流;turn_start 已发首拍);turn_end 主动停,不等 10s TTL 尾巴。
       if (target && event.type !== "turn_start") {
         if (event.type === "turn_end") {
+          stopTypingBeat(target.chatId);
           if (lastTypingRenewalAt.delete(target.chatId)) {
             sendTypingSafe(target.chatId, target.transport, false);
           }
@@ -1635,8 +1688,10 @@ export function createMessageRouter(deps: MessageRouterDeps): MessageRouter {
           if (roomToolCallsMode(target.chatId) === "off") {
             sendTypingSafe(target.chatId, target.transport);
             lastTypingRenewalAt.set(target.chatId, Date.now());
+            startTypingBeat(target.chatId, target.transport);
           } else {
             lastTypingRenewalAt.delete(target.chatId);
+            stopTypingBeat(target.chatId);
           }
         }
         return;
