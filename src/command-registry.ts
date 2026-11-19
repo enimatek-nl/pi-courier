@@ -84,6 +84,9 @@ export const COMMAND_REGISTRY: readonly CommandPolicy[] = [
   { name: "/trusted", guest: "blocked", stage: "adminCommands" },
   { name: "/revoke", guest: "blocked", stage: "adminCommands" },
   { name: "/toggletools", guest: "blocked", stage: "roomToolsToggle" },
+  // 全局显示偏好(DM 管理面):项目房内无覆盖 —— 脚注只挂终答,逐房开关
+  // 没有意义(与 hideToolCalls 的房级覆盖不同)。
+  { name: "/togglefooter", guest: "blocked", stage: "adminCommands" },
   // 主动外发(访客禁)
   { name: "/remind", guest: "blocked", stage: "slashCommands" },
   // MCP 服务器管理(spec #246,访客禁:配 MCP = 给 agent 加工具/外发通道,

@@ -28,7 +28,7 @@ function textMessage(text: string): AssistantMessage {
  * channel modes) are under test. barry = admin + trusted; carol = trusted
  * non-admin; rooms pre-listed in `channels` are enabled.
  */
-function makeFixtures(opts: { multiProject?: boolean; managementRoomAdoptionAllowed?: () => boolean; space?: { enabled?: boolean; roomId?: string; invitedUsers?: string[] }; channels?: Record<string, { enabled: boolean; mode: "all" | "mentions" | "trusted-only" }> } = {}) {
+function makeFixtures(opts: { multiProject?: boolean; managementRoomAdoptionAllowed?: () => boolean; space?: { enabled?: boolean; roomId?: string; invitedUsers?: string[] }; channels?: Record<string, { enabled: boolean; mode: "all" | "mentions" | "trusted-only" }>; hideStatusFooter?: boolean } = {}) {
   const codeBox: { current: string | null } = { current: null };
   const replies: Array<{ chatId: string; transport: string; text: string }> = [];
   const sendReply = async (chatId: string, transport: string, text: string) => {
@@ -67,6 +67,7 @@ function makeFixtures(opts: { multiProject?: boolean; managementRoomAdoptionAllo
     projects: {},
     ...(opts.multiProject === false ? {} : { multiProject: true }),
     ...(opts.space ? { space: opts.space } : {}),
+    ...(opts.hideStatusFooter ? { hideStatusFooter: true } : {}),
   }, () => {});
   const auth = new ChallengeAuth(
     (code) => {
@@ -537,6 +538,22 @@ describe("message-router multi-project routing", () => {
     expect(finalText).toContain("all done");
     expect(finalText).toContain("📂 /tmp/w");
     expect(finalText.endsWith("📂 /tmp/w · 📜 12.3%/1.0M · 🤖 m")).toBe(true);
+  });
+
+  // /togglefooter 的背板:配置里 hideStatusFooter = true 时,终答不再取数也
+  // 不再拼接 —— 与「从未启用脚注」逐字节一致(上方用例钉住开启形状)。
+  it("a hidden status footer leaves the final answer plain (hideStatusFooter)", async () => {
+    const fx = makeFixtures({ hideStatusFooter: true });
+    const hiddenRouter = fx.makeRouter();
+    await hiddenRouter.handleIncoming(makeMsg({ text: "hi" }));
+
+    hiddenRouter.handleEvent({ type: "turn_end", message: textMessage("all done") }, fx.rpc);
+    await new Promise((r) => setTimeout(r, 0));
+
+    const finalText = fx.replies.at(-1)!.text;
+    expect(finalText).toBe("all done");
+    expect(finalText).not.toContain("📂");
+    expect(finalText).not.toContain("---");
   });
 
   it("a >4000-char final answer splits and only the last chunk carries the footer", async () => {

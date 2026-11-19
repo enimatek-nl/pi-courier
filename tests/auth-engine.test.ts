@@ -369,6 +369,29 @@ describe("handleAdminCommand (pure in/out)", () => {
     expect(shownAgain.effects).toEqual([{ kind: "hideToolCalls", value: false }]);
   });
 
+  it("/togglefooter flips the status-footer visibility as an effect (same store contract)", () => {
+    const { auth } = makeEngine();
+    const hidden = handleAdminCommand(auth, {
+      text: "/togglefooter",
+      userId: "@barry:server",
+      transport: "matrix",
+      hideStatusFooter: false,
+    });
+    expect(hidden.handled).toBe(true);
+    expect(hidden.effects).toEqual([{ kind: "hideStatusFooter", value: true }]);
+    expect(hidden.replies.length).toBe(1);
+    // 回执与开关同语言(键缺失会直接输出键名 —— 与上方 /toggletools 同钉法)。
+    expect(hidden.replies[0]).toContain("📝");
+
+    const shownAgain = handleAdminCommand(auth, {
+      text: "/togglefooter",
+      userId: "@barry:server",
+      transport: "matrix",
+      hideStatusFooter: true,
+    });
+    expect(shownAgain.effects).toEqual([{ kind: "hideStatusFooter", value: false }]);
+  });
+
   it("/revoke emits a warning notification plus persistAuth and the powerDemote effect; unknown users reply only", () => {
     const { auth } = makeEngine();
     const ok = handleAdminCommand(auth, { text: "/revoke @carol:server", userId: "@barry:server", transport: "matrix" });

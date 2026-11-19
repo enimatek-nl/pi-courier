@@ -1,12 +1,13 @@
 /**
  * Admin command handling for the auth engine (/trusted /revoke /channels
- * /enable /disable /toggletools + challenge-code entry).
+ * /enable /disable /toggletools /togglefooter + challenge-code entry).
  *
  * Pure input → output: text + identity in, handled / replies /
  * notifications / effects out. The engine's in-memory mutations happen
- * through ChallengeAuth methods; persistence (auth snapshot, tool-call
- * visibility) is returned as effects for the CALLER to apply through the
- * injected config store — this module touches no disk and holds no state.
+ * through ChallengeAuth methods; persistence (auth snapshot, tool-call and
+ * status-footer visibility) is returned as effects for the CALLER to apply
+ * through the injected config store — this module touches no disk and holds
+ * no state.
  */
 
 import { t } from "../i18n/index.js";
@@ -16,6 +17,9 @@ import { type ChallengeAuth, MAX_PAIRING_ATTEMPTS, PAIRING_BLOCK_MINUTES } from 
 export type AdminEffect =
   | { kind: "persistAuth" }
   | { kind: "hideToolCalls"; value: boolean }
+  /** 回复末尾状态脚注开关(全局显示偏好,与 hideToolCalls 同族:效果回传
+   *  给调用方落盘,本模块不碰配置)。 */
+  | { kind: "hideStatusFooter"; value: boolean }
   /** Trust was just granted to this user via a passed challenge — the caller
    *  invites them into the organizational space (fire-once, best-effort). */
   | { kind: "spaceInvite"; userId: string; transport?: string }
@@ -43,6 +47,8 @@ export interface AdminCommandInput {
   chatId?: string;
   /** Current tool-call visibility (read by the caller before dispatch). */
   hideToolCalls?: boolean;
+  /** Current status-footer visibility (same read-then-flip contract). */
+  hideStatusFooter?: boolean;
 }
 
 export interface AdminCommandResult {
@@ -189,6 +195,17 @@ export function handleAdminCommand(auth: ChallengeAuth, input: AdminCommandInput
         replies: [t("cmd.toggletools.ok", { state: next ? t("cmd.toggletools.hidden") : t("cmd.toggletools.shown") })],
         notifications: [],
         effects: [{ kind: "hideToolCalls", value: next }],
+      });
+    }
+
+    case "/togglefooter": {
+      // 终答末尾的状态脚注(📂 路径 · 📜 上下文 · 🤖 模型):全局显示偏好,
+      // 与 /toggletools 同契约 —— 只回传效果,落盘归调用方。
+      const next = !input.hideStatusFooter;
+      return handled({
+        replies: [t("cmd.togglefooter.ok", { state: next ? t("cmd.togglefooter.hidden") : t("cmd.togglefooter.shown") })],
+        notifications: [],
+        effects: [{ kind: "hideStatusFooter", value: next }],
       });
     }
 

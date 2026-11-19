@@ -843,7 +843,7 @@ TypeError: webidl.util.markAsUncloneable is not a function
 Matrix 消息(transport 只做纯 I/O,不做授权判定)
   → 群聊 /enable(授权计算先行、授权生效在后 —— 未启用房间的消息正是靠本步骤在生效前启用房间;all 仅管理员)
     → 认证检查(trusted / challenge)
-      → bridge 管理命令(/trusted /revoke /channels /enable <chatId> /disable /toggletools)
+      → bridge 管理命令(/trusted /revoke /channels /enable <chatId> /disable /toggletools /togglefooter)
         → /pmctl 家族(PmctlController:门禁 + new/list/show/rm/mv/rename;空间启用时 new 挂链、rm 先摘链再退房)
           → 登录管理(/login /logout /auth —— 仅管理员 + 管理房间,单工程模式 DM 即管理房间)
             → RPC 映射命令(/new /compact /model /queue /interrupt ...;DM /help 也在这里,统一输出 Pi 原生/桥增强/管理三组)

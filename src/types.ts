@@ -90,6 +90,13 @@ export interface MsgBridgeConfig {
   };
   hideToolCalls?: boolean;
   /**
+   * 回复末尾状态脚注(status-footer):缺省开启 —— 终答末尾附一行
+   * 「📂 工作目录 · 📜 上下文占用 · 🤖 模型·思考等级」。true = 整段不附
+   * (工具循环中间消息本就不挂,此处只影响终答);取数与拼接口径不变,
+   * 只是不再出站拼接。
+   */
+  hideStatusFooter?: boolean;
+  /**
    * 工具循环中间回合聚合(issue #235):默认开启 —— 中间回合不再逐条刷屏,
    * 而是聚合进同一张「工作中」的活卡持续就地刷新(Matrix MSC2676 消息编辑),
    * 终答回合仍是独立新消息。false = 完全旁路,与旧版逐条发送逐字节一致。

@@ -45,6 +45,9 @@ const en: Record<MessageKey, string> = {
   "cmd.toggletools.ok": "🔧 Tool calls {state} in remote messages",
   "cmd.toggletools.hidden": "hidden",
   "cmd.toggletools.shown": "shown",
+  "cmd.togglefooter.ok": "📝 Status footer {state} in replies",
+  "cmd.togglefooter.hidden": "hidden",
+  "cmd.togglefooter.shown": "shown",
   "cmd.revoke.usage": "Usage: /revoke <userId> or /revoke <transport:userId>",
   "cmd.revoke.ok": "🔓 Revoked trust for {userId}",
   "cmd.revoke.notify": "Revoked: {userId}",
@@ -512,6 +515,7 @@ const en: Record<MessageKey, string> = {
     "• `/trusted` — list trusted users\n" +
     "• `/revoke <user>` — revoke a user's trusted status\n" +
     "• `/toggletools` — toggle tool-call visibility (when hidden, tool calls stop appearing in the chat)\n" +
+    "• `/togglefooter` — toggle the status footer (the `📂 path · 📜 context · 🤖 model` line under each final answer)\n" +
     "\n" +
     "【Multi-project & projects】(management room)\n" +
     "• `/multiproject on|off` — multi-project mode toggle (restart to apply)\n" +

@@ -48,6 +48,9 @@ const zh = {
   "cmd.toggletools.ok": "🔧 工具调用已在远程消息中{state}",
   "cmd.toggletools.hidden": "隐藏",
   "cmd.toggletools.shown": "显示",
+  "cmd.togglefooter.ok": "📝 回复末尾状态脚注已{state}",
+  "cmd.togglefooter.hidden": "隐藏",
+  "cmd.togglefooter.shown": "显示",
   "cmd.revoke.usage": "用法: /revoke <userId> 或 /revoke <transport:userId>",
   "cmd.revoke.ok": "🔓 已撤销 {userId} 的信任",
   "cmd.revoke.notify": "已撤销:{userId}",
@@ -496,6 +499,7 @@ const zh = {
     "• `/trusted` — 列出信任用户名单\n" +
     "• `/revoke <用户>` — 撤销某用户的信任身份\n" +
     "• `/toggletools` — 切换工具调用的显示/隐藏(隐藏后群里不刷 tool call)\n" +
+    "• `/togglefooter` — 切换回复末尾状态脚注的显示/隐藏(终答下方 `📂 路径 · 📜 上下文 · 🤖 模型` 那一行)\n" +
     "\n" +
     "【多工程与项目】(管理房间)\n" +
     "• `/multiproject on|off` — 多工程模式开关(重启生效)\n" +

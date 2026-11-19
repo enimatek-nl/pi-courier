@@ -885,6 +885,7 @@ export function createMessageRouter(deps: MessageRouterDeps): MessageRouter {
           transport: msg.transport,
           chatId: msg.chatId,
           hideToolCalls: store.get().hideToolCalls,
+          hideStatusFooter: store.get().hideStatusFooter,
         });
         if (!result.handled) return false;
         // 审计(issue #124):纯模块裁决事件名,router 落账 —— 认证与信任
@@ -903,6 +904,8 @@ export function createMessageRouter(deps: MessageRouterDeps): MessageRouter {
             store.update({ auth: auth.exportConfig() });
           } else if (effect.kind === "hideToolCalls") {
             store.update({ hideToolCalls: effect.value });
+          } else if (effect.kind === "hideStatusFooter") {
+            store.update({ hideStatusFooter: effect.value });
           } else if (effect.kind === "spaceInvite" && roomOps) {
             // Trust just granted (challenge passed): invite into the
             // organizational space — fire-once, best-effort (see space-topology.ts).
@@ -1741,7 +1744,9 @@ export function createMessageRouter(deps: MessageRouterDeps): MessageRouter {
         // 改为异步出站,但下方绑定释放保持同步原位,不等派发落账。
         const dispatch = async (): Promise<void> => {
           let outgoing = chunks;
-          if (!turn.pendingTools) {
+          // /togglefooter(hideStatusFooter)关的是这一整段:不取数也不拼接,
+          // 终答与未启用脚注时逐字节一致(工具循环中间消息本就不挂)。
+          if (!turn.pendingTools && !store.get().hideStatusFooter) {
             const footer = await collectStatusFooter(rpc);
             outgoing = chunks.map((chunk, index) =>
               index === chunks.length - 1 ? appendStatusFooter(chunk, footer) : chunk

@@ -263,7 +263,7 @@ pi-courier enable     # 安装 systemd 服务:开机自启 + 立即启动(Linux;
 | `/reload` | 重启 pi(装完扩展/配置后);`/reload all` 重启本实例全部空闲 pi 进程 |
 | `/help` | 完整帮助 |
 
-**bridge 管理命令**:`/trusted`、`/revoke <userId>`、`/channels`、`/enable [chatId] <模式>`、`/disable <chatId>`、`/toggletools`(项目房内:`/toggletools <auto|on|off>` 按房间覆盖工具流显示 —— auto=owner 房开/guest 协作房关,spec #299)
+**bridge 管理命令**:`/trusted`、`/revoke <userId>`、`/channels`、`/enable [chatId] <模式>`、`/disable <chatId>`、`/toggletools`(项目房内:`/toggletools <auto|on|off>` 按房间覆盖工具流显示 —— auto=owner 房开/guest 协作房关,spec #299)、`/togglefooter`(开关回复末尾状态脚注 —— 终答下方 `📂 工作目录 · 📜 上下文占用 · 🤖 模型·思考` 那一行;全局生效,落盘为 `hideStatusFooter`)
 
 **其他任何 `/` 开头的内容**都直接透传给 pi —— 扩展命令、`/skill:名称`、提示词模板由 pi 展开。普通文本就是正常对话。
 
@@ -280,7 +280,7 @@ pi-courier enable     # 安装 systemd 服务:开机自启 + 立即启动(Linux;
 
 ### 工具循环聚合:一张「工作中」的卡片持续刷新
 
-agent 跑长任务时,工具循环的**中间回合不再逐条刷屏**:首回合发一张「工作中」卡片,**卡里只有工具调用行**,之后的每个中间回合对**同一张卡就地编辑刷新**(Matrix 消息编辑,MSC2676;Element X / Element Web / FluffyChat 均就地渲染)—— 进度一眼可见,手机通知不再被中间轮轰炸。模型夹在工具调用之间的**旁白文本不进卡**:它独立成一条普通消息,当前工具卡就此定稿,后续工具调用开新卡继续刷新。**终答回合**照旧是独立新消息(挂状态脚注),重要结论的通知不会被编辑吞掉。用不支持编辑的旧客户端?你看到的是带 `* ` 前缀的全文 fallback,内容一点不少。卡片内容逼近单条消息上限(4000 字符)时自动**定稿旧卡、开新卡继续**(任意时刻只有最新一张卡会被刷新);编辑失败自动**退回逐条发消息**的旧行为,内容绝不丢。`/toggletools` 隐藏工具行(hideToolCalls)时聚合整体旁路,与旧版逐字节一致。
+agent 跑长任务时,工具循环的**中间回合不再逐条刷屏**:首回合发一张「工作中」卡片,**卡里只有工具调用行**,之后的每个中间回合对**同一张卡就地编辑刷新**(Matrix 消息编辑,MSC2676;Element X / Element Web / FluffyChat 均就地渲染)—— 进度一眼可见,手机通知不再被中间轮轰炸。模型夹在工具调用之间的**旁白文本不进卡**:它独立成一条普通消息,当前工具卡就此定稿,后续工具调用开新卡继续刷新。**终答回合**照旧是独立新消息(挂状态脚注),重要结论的通知不会被编辑吞掉。用不支持编辑的旧客户端?你看到的是带 `* ` 前缀的全文 fallback,内容一点不少。卡片内容逼近单条消息上限(4000 字符)时自动**定稿旧卡、开新卡继续**(任意时刻只有最新一张卡会被刷新);编辑失败自动**退回逐条发消息**的旧行为,内容绝不丢。`/toggletools` 隐藏工具行(hideToolCalls)时聚合整体旁路,与旧版逐字节一致。终答携带的**状态脚注**同样可关:`/togglefooter`(hideStatusFooter)关掉后,终答与脚注功能出现之前逐字节一致。
 
 **部署提示(Synapse 限速)**:聚合会让 bot 的发帖频率显著升高(一次 N 轮工具循环 ≈ N 次编辑)。Synapse 默认按账号限速 `rc_message`(0.2 条/秒,突发 10)—— 被限速的最坏表现是**编辑延迟到达**:卡片刷新变慢,但编辑总会收敛到最终态,内容不丢(真不支持编辑时还有自动降级兜底)。自建 homeserver 可二选一豁免 —— 全局调高 `homeserver.yaml`:
 
@@ -493,7 +493,7 @@ ssh -L <端口>:127.0.0.1:<端口> <用户>@<桥主机>
 把 bot 分享给同事不必连管理员权限一起交出去。在 `auth.guestUsers` 里手工列访客(MXID,与 `trustedUsers` 同款 `matrix:@user:server` 形式;重启生效),他们即获得中间一档:
 
 - **访客可以**:在 DM 和全员启用的群里聊天、发附件、用只读命令(`/help` `/status` `/cost` `/models` `/queue` …);
-- **访客不能**碰危险面 —— 桥在**任何东西执行之前**就拦下,礼貌回执 `🚫 此命令需要信任用户权限:<命令>`:shell 执行(`!` `!!` `/bash` `/bashstop`)、项目管理(`/pmctl*`)、认证(`/login` `/logout` `/auth`)、生命周期(`/reload` `/stop` `/interrupt` `/enable` `/disable` `/switch` `/multiproject`)、信任名单(`/trusted` `/revoke` `/toggletools`)、主动外发(`/remind`)与会话镜像(`/attach` `/detach`);
+- **访客不能**碰危险面 —— 桥在**任何东西执行之前**就拦下,礼貌回执 `🚫 此命令需要信任用户权限:<命令>`:shell 执行(`!` `!!` `/bash` `/bashstop`)、项目管理(`/pmctl*`)、认证(`/login` `/logout` `/auth`)、生命周期(`/reload` `/stop` `/interrupt` `/enable` `/disable` `/switch` `/multiproject`)、信任名单(`/trusted` `/revoke` `/toggletools` `/togglefooter`)、主动外发(`/remind`)与会话镜像(`/attach` `/detach`);
 - 每次拦截都进审计日志(见下节);权限边界在桥、不靠模型自觉 —— 但也如实声明边界:访客的**对话**仍可驱动 agent 自己的工具(pi 无按会话的工具开关,那是上游领地);
 - 房间模式语义优先:`trusted-only` 群照样把访客挡在门外;访客也**永不触发配对码** —— 名单内直接聊。
 
