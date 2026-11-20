@@ -305,6 +305,18 @@ Authorization: Bearer <admin access token>
 { "aggregateToolTurns": false }
 ```
 
+### The "typing…" heartbeat is the progress signal
+
+While pi is working on your turn, the bot holds up the room's **`…is typing…`** indicator. Matrix keeps a typing flag alive for 10 s, so pi-courier keeps pushing it: turn events renew it (5 s throttle) and a **7 s heartbeat during the turn** covers the quiet stretches — most importantly a long tool call, which produces no turn events at all and used to let the indicator die silently mid-task (#363). It stops on `turn_end`, on a session restart, and when a room switches back to live tool cards.
+
+In a quiet setup that single line *is* the progress surface: with tool calls hidden (`/toggletools`) and the status footer off (`/togglefooter`), typing means still working, no typing means the answer is in. `/status` and `/model` still give the numbers the footer used to show.
+
+### Notifications: a final answer can tag whoever asked
+
+By default an answer is a plain message — nothing pulls a particular person back to the room. Turn it on with `/togglemention` (persisted as `mentionAsker`) and every **final answer** opens with the asker's full `@user:server` **and** carries MSC3089 `m.mentions` on that same event: the tag is the part you see, `m.mentions` is the part your client's push rules actually read. In a shared room that is the difference between "the bot answered at some point" and "my task is done".
+
+Three deliberate limits: only final answers — intermediate tool-loop turns and the live tool card never tag, so a 20-step task notifies once instead of twenty; exactly one event per answer, even when a long answer is split into several messages; and the tag follows whoever asked *this* turn, not whoever spoke last.
+
 ### Workflow progress live card
 
 When pi runs a dynamic workflow (multi-phase runs with subagents), the bot posts a **single live card** and refreshes it in place as the run progresses — the title line shows the status icon, workflow name, phase progress (`x/y`), and running token/cost totals; a phase chain (`✅ Alpha  ⏳ Beta  ○ Gamma`) tracks first-seen phases; a Markdown table lists subagents with their phase, status, and token counts. Finished/skipped subagents never disappear from the card: running ones always stay visible, plus the 4 most recently finished — anything older collapses into a single count line, so the card never scrolls into a new message. On the final state the card shows the run's result preview and stays in the room as the record.
