@@ -5,7 +5,7 @@ import { t } from "../i18n/index.js";
 import { logger, suppressLogLines } from "../logger.js";
 import { buildGroupJoinHint } from "../management-room.js";
 import { createQuoteCache, type QuoteCache } from "../quote-cache.js";
-import type { ExternalMessage } from "../types.js";
+import type { ExternalMessage, SendOptions } from "../types.js";
 import {
   AttachmentStore,
   AttachmentTooLargeError,
@@ -263,13 +263,16 @@ export class MatrixProvider {
    * 从「无」穿出为事件 ID 字符串,调用方——后续票的活卡状态机——凭它发起
    * 编辑)。空白文本仍是既有行为:不发送、早退返回空串(无事件可指)。
    */
-  async sendMessage(chatId: string, text: string): Promise<string> {
+  async sendMessage(chatId: string, text: string, opts?: SendOptions): Promise<string> {
     if (!this.client) {
       throw new Error("Matrix client not connected");
     }
     if (!text?.trim()) return "";
 
     const { body, formattedBody } = formatForMatrix(text);
+    // 点名只在这一处入站出站链(spec #364):正文里带不带 `@user:server` 是
+    // 调用方的事,这里只补上触发通知的结构化字段。
+    const mentionUserIds = sanitizeMentionUserIds(opts?.mentionUserIds);
 
     return this.enqueueSend(chatId, () => {
       // 排队期间可能已 disconnect(client 置空):报可读错误而非 TypeError。
@@ -281,6 +284,7 @@ export class MatrixProvider {
           format: "org.matrix.custom.html",
           formatted_body: formattedBody,
         }),
+        ...(mentionUserIds.length > 0 && { "m.mentions": { user_ids: mentionUserIds } }),
       });
     });
   }
@@ -690,6 +694,17 @@ async function readBoundedErrorText(res: Response): Promise<string> {
 // breaks:true keeps chat-style single newlines as <br>;
 // linkify turns bare URLs into links.
 const md = new MarkdownIt({ html: false, breaks: true, linkify: true });
+
+/**
+ * 点名名单的守门(spec #364):只有形如 `@localpart:server` 的串能进
+ * `m.mentions.user_ids` —— 规范上这里只收用户 ID,塞进脏东西会让整条
+ * 消息在服务器端被拒(M_INVALID_PARAM),所以宁可少点一个名。
+ */
+export function sanitizeMentionUserIds(ids: readonly string[] | undefined): string[] {
+  return (ids ?? []).filter((id) => typeof id === "string" && MATRIX_USER_ID_RE.test(id));
+}
+
+const MATRIX_USER_ID_RE = /^@[^\s@:]+:\S+$/;
 
 /**
  * Convert markdown to Matrix HTML. Returns plain body (fallback) + formatted HTML.

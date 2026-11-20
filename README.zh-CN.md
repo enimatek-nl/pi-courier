@@ -263,7 +263,7 @@ pi-courier enable     # 安装 systemd 服务:开机自启 + 立即启动(Linux;
 | `/reload` | 重启 pi(装完扩展/配置后);`/reload all` 重启本实例全部空闲 pi 进程 |
 | `/help` | 完整帮助 |
 
-**bridge 管理命令**:`/trusted`、`/revoke <userId>`、`/channels`、`/enable [chatId] <模式>`、`/disable <chatId>`、`/toggletools`(项目房内:`/toggletools <auto|on|off>` 按房间覆盖工具流显示 —— auto=owner 房开/guest 协作房关,spec #299)、`/togglefooter`(开关回复末尾状态脚注 —— 终答下方 `📂 工作目录 · 📜 上下文占用 · 🤖 模型·思考` 那一行;全局生效,落盘为 `hideStatusFooter`)
+**bridge 管理命令**:`/trusted`、`/revoke <userId>`、`/channels`、`/enable [chatId] <模式>`、`/disable <chatId>`、`/toggletools`(项目房内:`/toggletools <auto|on|off>` 按房间覆盖工具流显示 —— auto=owner 房开/guest 协作房关,spec #299)、`/togglefooter`(开关回复末尾状态脚注 —— 终答下方 `📂 工作目录 · 📜 上下文占用 · 🤖 模型·思考` 那一行;全局生效,落盘为 `hideStatusFooter`)、`/togglemention`(终答开头点名提问者 —— 正文里的 `@user:server` 加上 MSC3089 `m.mentions`,后者才是客户端发通知的依据;全局生效,落盘为 `mentionAsker`)
 
 **其他任何 `/` 开头的内容**都直接透传给 pi —— 扩展命令、`/skill:名称`、提示词模板由 pi 展开。普通文本就是正常对话。
 
@@ -504,7 +504,7 @@ ssh -L <端口>:127.0.0.1:<端口> <用户>@<桥主机>
 把 bot 分享给同事不必连管理员权限一起交出去。在 `auth.guestUsers` 里手工列访客(MXID,与 `trustedUsers` 同款 `matrix:@user:server` 形式;重启生效),他们即获得中间一档:
 
 - **访客可以**:在 DM 和全员启用的群里聊天、发附件、用只读命令(`/help` `/status` `/cost` `/models` `/queue` …);
-- **访客不能**碰危险面 —— 桥在**任何东西执行之前**就拦下,礼貌回执 `🚫 此命令需要信任用户权限:<命令>`:shell 执行(`!` `!!` `/bash` `/bashstop`)、项目管理(`/pmctl*`)、认证(`/login` `/logout` `/auth`)、生命周期(`/reload` `/stop` `/interrupt` `/enable` `/disable` `/switch` `/multiproject`)、信任名单(`/trusted` `/revoke` `/toggletools` `/togglefooter`)、主动外发(`/remind`)与会话镜像(`/attach` `/detach`);
+- **访客不能**碰危险面 —— 桥在**任何东西执行之前**就拦下,礼貌回执 `🚫 此命令需要信任用户权限:<命令>`:shell 执行(`!` `!!` `/bash` `/bashstop`)、项目管理(`/pmctl*`)、认证(`/login` `/logout` `/auth`)、生命周期(`/reload` `/stop` `/interrupt` `/enable` `/disable` `/switch` `/multiproject`)、信任名单(`/trusted` `/revoke` `/toggletools` `/togglefooter` `/togglemention`)、主动外发(`/remind`)与会话镜像(`/attach` `/detach`);
 - 每次拦截都进审计日志(见下节);权限边界在桥、不靠模型自觉 —— 但也如实声明边界:访客的**对话**仍可驱动 agent 自己的工具(pi 无按会话的工具开关,那是上游领地);
 - 房间模式语义优先:`trusted-only` 群照样把访客挡在门外;访客也**永不触发配对码** —— 名单内直接聊。
 

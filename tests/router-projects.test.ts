@@ -15,7 +15,7 @@ import { captureConsole, makeMsg, makeProjectManagerStub, makeRouterFixture } fr
 import type { PiRpc } from "../src/rpc/pi-rpc";
 import type { ProjectManager } from "../src/rpc/project-manager";
 import type { RoomOps } from "../src/transports/interface";
-import type { ExternalMessage } from "../src/types";
+import type { ExternalMessage, SendOptions } from "../src/types";
 
 /** Minimal assistant-shaped message for turn_end events. */
 function textMessage(text: string): AssistantMessage {
@@ -28,11 +28,13 @@ function textMessage(text: string): AssistantMessage {
  * channel modes) are under test. barry = admin + trusted; carol = trusted
  * non-admin; rooms pre-listed in `channels` are enabled.
  */
-function makeFixtures(opts: { multiProject?: boolean; managementRoomAdoptionAllowed?: () => boolean; space?: { enabled?: boolean; roomId?: string; invitedUsers?: string[] }; channels?: Record<string, { enabled: boolean; mode: "all" | "mentions" | "trusted-only" }>; hideStatusFooter?: boolean } = {}) {
+function makeFixtures(opts: { multiProject?: boolean; managementRoomAdoptionAllowed?: () => boolean; space?: { enabled?: boolean; roomId?: string; invitedUsers?: string[] }; channels?: Record<string, { enabled: boolean; mode: "all" | "mentions" | "trusted-only" }>; hideStatusFooter?: boolean; mentionAsker?: boolean } = {}) {
   const codeBox: { current: string | null } = { current: null };
-  const replies: Array<{ chatId: string; transport: string; text: string }> = [];
-  const sendReply = async (chatId: string, transport: string, text: string) => {
-    replies.push({ chatId, transport, text });
+  // 点名是出站选项而非正文的一部分,所以这里把它单独记一笔 —— 断言才能
+  // 分开钉「正文里有没有 @」和「这一条带不带 m.mentions」。
+  const replies: Array<{ chatId: string; transport: string; text: string; mentionUserIds?: string[] }> = [];
+  const sendReply = async (chatId: string, transport: string, text: string, sendOpts?: SendOptions) => {
+    replies.push({ chatId, transport, text, ...(sendOpts?.mentionUserIds ? { mentionUserIds: sendOpts.mentionUserIds } : {}) });
   };
   const rpc: PiRpc = {
     prompt: vi.fn().mockResolvedValue(undefined),
@@ -68,6 +70,7 @@ function makeFixtures(opts: { multiProject?: boolean; managementRoomAdoptionAllo
     ...(opts.multiProject === false ? {} : { multiProject: true }),
     ...(opts.space ? { space: opts.space } : {}),
     ...(opts.hideStatusFooter ? { hideStatusFooter: true } : {}),
+    ...(opts.mentionAsker ? { mentionAsker: true } : {}),
   }, () => {});
   const auth = new ChallengeAuth(
     (code) => {
@@ -554,6 +557,42 @@ describe("message-router multi-project routing", () => {
     expect(finalText).toBe("all done");
     expect(finalText).not.toContain("📂");
     expect(finalText).not.toContain("---");
+  });
+
+  // 终答点名(spec #364):开时首片行首是提问者的 MXID,且 m.mentions 只随
+  // 那一条 —— 通知按事件计,分片长文因此恰好点一次而不是 N 次。
+  it("mentionAsker tags the asker once: MXID and m.mentions on the first chunk only", async () => {
+    const fx = makeFixtures({ mentionAsker: true });
+    const router = fx.makeRouter();
+    await router.handleIncoming(makeMsg({ text: "hi" }));
+
+    const before = fx.replies.length;
+    // 无空白换行的长文 → splitMessage 硬切成两片。
+    router.handleEvent({ type: "turn_end", message: textMessage("x".repeat(4500)) }, fx.rpc);
+    await new Promise((r) => setTimeout(r, 0));
+    await new Promise((r) => setTimeout(r, 0));
+
+    const chunks = fx.replies.slice(before);
+    expect(chunks.length).toBe(2);
+    expect(chunks[0]!.text.startsWith("@barry:server\n")).toBe(true);
+    expect(chunks[0]!.mentionUserIds).toEqual(["@barry:server"]);
+    expect(chunks[1]!.text.startsWith("x")).toBe(true);
+    expect(chunks[1]!.mentionUserIds).toBeUndefined();
+  });
+
+  // 缺省不开:终答逐字节回到点名功能之前(hideStatusFooter 只是把脚注拿掉,
+  // 让断言能钉住整个终答;此处钉的是「不递点名选项」)。
+  it("a disabled mention leaves both the text and the send options untouched", async () => {
+    const fx = makeFixtures({ hideStatusFooter: true });
+    const router = fx.makeRouter();
+    await router.handleIncoming(makeMsg({ text: "hi" }));
+
+    router.handleEvent({ type: "turn_end", message: textMessage("all done") }, fx.rpc);
+    await new Promise((r) => setTimeout(r, 0));
+
+    const finalMessage = fx.replies.at(-1)!;
+    expect(finalMessage.text).toBe("all done");
+    expect(finalMessage.mentionUserIds).toBeUndefined();
   });
 
   it("a >4000-char final answer splits and only the last chunk carries the footer", async () => {

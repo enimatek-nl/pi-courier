@@ -159,6 +159,42 @@ describe("MatrixProvider.connect", () => {
     expect(received[0].username).toBe("alice");
   });
 
+  // 终答点名(spec #364):m.mentions 是客户端发通知的唯一依据,所以它只在
+  // 显式点名时出现(不点时连键都不造),而且名单先过守门。
+  it("sendMessage:点名写进 MSC3089 m.mentions;不点名时该键根本不存在", async () => {
+    const { provider, clients } = makeProvider();
+    await provider.connect();
+    const client = clients[0];
+
+    await provider.sendMessage(ROOM, "quiet");
+    await provider.sendMessage(ROOM, `${ALICE}\nhi`, { mentionUserIds: [ALICE] });
+
+    const [roomId, plain] = client.sendMessage.mock.calls[0]! as unknown as [string, Record<string, unknown>];
+    expect(roomId).toBe(ROOM);
+    expect(plain).not.toHaveProperty("m.mentions");
+
+    const [, mentioned] = client.sendMessage.mock.calls[1]! as unknown as [
+      string,
+      { body: string; "m.mentions"?: { user_ids: string[] } }
+    ];
+    expect(mentioned.body.startsWith(`${ALICE}\n`)).toBe(true);
+    expect(mentioned["m.mentions"]).toEqual({ user_ids: [ALICE] });
+  });
+
+  it("sendMessage:不像 MXID 的名字被守门拦下,消息本身照发", async () => {
+    const { provider, clients } = makeProvider();
+    await provider.connect();
+    const client = clients[0];
+
+    await provider.sendMessage(ROOM, "hi", { mentionUserIds: ["alice", "", "@ok:server"] });
+
+    const [, content] = client.sendMessage.mock.calls[0]! as unknown as [
+      string,
+      { "m.mentions"?: { user_ids: string[] } }
+    ];
+    expect(content["m.mentions"]).toEqual({ user_ids: ["@ok:server"] });
+  });
+
   it("encryptionAvailable 跟随端口 crypto 成员的有无", async () => {
     const withCrypto = makeProvider({ queue: [fakeMatrixClient({ crypto: fakeCrypto() })] });
     await withCrypto.provider.connect();

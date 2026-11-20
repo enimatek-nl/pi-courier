@@ -108,6 +108,13 @@ export interface MsgBridgeConfig {
    */
   hideStatusFooter?: boolean;
   /**
+   * 终答点名提问人(mentionAsker,spec #364):缺省关。开启后每条终答的
+   * 首片行首附提问人的 `@user:server`,并带 MSC3089 `m.mentions.user_ids`
+   * —— 后者才是客户端发通知的依据。多房共用一个 pi 会话时,点名的始终是
+   * 本回合的提问者(replyTarget.userId)。
+   */
+  mentionAsker?: boolean;
+  /**
    * 工具循环中间回合聚合(issue #235):默认开启 —— 中间回合不再逐条刷屏,
    * 而是聚合进同一张「工作中」的活卡持续就地刷新(Matrix MSC2676 消息编辑),
    * 终答回合仍是独立新消息。false = 完全旁路,与旧版逐条发送逐字节一致。
@@ -408,6 +415,22 @@ export interface ReplyTarget {
   chatId: string;
   transport: string;
   username: string;
+  /**
+   * 提问人在传输层的稳定身份(Matrix = MXID,`@user:server`)。点名终答
+   * (spec #364)用它发起 `m.mentions`,所以这里存的是**原始 ID**,不带
+   * 认证层的 `matrix:` 前缀。可选:没有可点名身份的传输就不点名。
+   */
+  userId?: string;
+}
+
+/**
+ * 出站消息的可选附加项,经 `sendReply` 透传给 transport。目前只有点名一项;
+ * 没有附加项时调用方一律不传(现有调用点逐字节不变)。
+ */
+export interface SendOptions {
+  /** MSC3089 结构化点名名单(Matrix = MXID 列表)—— 通知的依据就在这里,
+   *  正文里的 `@user:server` 只是给人看的那一半。 */
+  mentionUserIds?: string[];
 }
 
 /**

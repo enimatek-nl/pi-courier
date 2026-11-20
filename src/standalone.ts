@@ -65,6 +65,7 @@ import { FileEventLedger } from "./transports/event-ledger.js";
 import type { RoomOps } from "./transports/interface.js";
 import { MatrixProvider } from "./transports/matrix.js";
 import { createMatrixClient } from "./transports/matrix-client.js";
+import type { SendOptions } from "./types.js";
 import { consumePendingUpdate, PendingUpdateStore, pendingUpdatePath } from "./update/pending-update.js";
 import { UpdateOrchestrator } from "./update/updater.js";
 import { runUpgrade } from "./update/upgrade.js";
@@ -405,19 +406,20 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<void
   // ---- message routing ------------------------------------------------------
   // 发送内核(票 #210 评审收尾):失败必须抛出 —— 上线欢迎卡靠它把失败
   // 带进 /pmctl new 的管理房回执附注;其余调用方一律经 sendReply 静默。
-  const sendReplyStrict = async (chatId: string, text: string): Promise<void> => {
+  const sendReplyStrict = async (chatId: string, text: string, opts?: SendOptions): Promise<void> => {
     const provider = matrix;
     if (!provider) throw new Error("Transport matrix not found");
     if (!provider.isConnected) throw new Error("Transport matrix not connected");
-    await provider.sendMessage(chatId, text);
+    await provider.sendMessage(chatId, text, opts);
   };
-  const sendReply = async (chatId: string, transport: string, text: string): Promise<void> => {
+  const sendReply = async (chatId: string, transport: string, text: string, opts?: SendOptions): Promise<void> => {
     try {
       // transport 参数仅诊断显示(下方日志与错误文案拼贴),不参与 adapter
       // 查找 —— C8 退役注册表后,全文已无按 transport 名寻址的消费方
       // (grep 证实:仅剩字符串插值);签名保留以维持日志口径不变。
       // ExternalMessage.transport 字段本身是路由元数据,照旧携带。
-      await sendReplyStrict(chatId, text);
+      // opts(spec #364)只有终答点名一处给,其余调用点不传 = 逐字节不变。
+      await sendReplyStrict(chatId, text, opts);
       logger
         .withLabel(projectManager.labelForRoom(chatId))
         .debug(`📤 [${transport}] ${truncateLine(text, 500)}`);

@@ -1,6 +1,7 @@
 /**
  * Admin command handling for the auth engine (/trusted /revoke /channels
- * /enable /disable /toggletools /togglefooter + challenge-code entry).
+ * /enable /disable /toggletools /togglefooter /togglemention + challenge-code
+ * entry).
  *
  * Pure input → output: text + identity in, handled / replies /
  * notifications / effects out. The engine's in-memory mutations happen
@@ -20,6 +21,9 @@ export type AdminEffect =
   /** 回复末尾状态脚注开关(全局显示偏好,与 hideToolCalls 同族:效果回传
    *  给调用方落盘,本模块不碰配置)。 */
   | { kind: "hideStatusFooter"; value: boolean }
+  /** 终答是否点名提问人(spec #364):与上面两个显示偏好同契约 —— 效果
+   *  回传给调用方落盘,本模块不碰配置。注意它是**正**字段:true = 点名。 */
+  | { kind: "mentionAsker"; value: boolean }
   /** Trust was just granted to this user via a passed challenge — the caller
    *  invites them into the organizational space (fire-once, best-effort). */
   | { kind: "spaceInvite"; userId: string; transport?: string }
@@ -49,6 +53,9 @@ export interface AdminCommandInput {
   hideToolCalls?: boolean;
   /** Current status-footer visibility (same read-then-flip contract). */
   hideStatusFooter?: boolean;
+  /** Current asker-mention state (same read-then-flip contract, positive
+   *  field: true = 终答点名)。 */
+  mentionAsker?: boolean;
 }
 
 export interface AdminCommandResult {
@@ -206,6 +213,17 @@ export function handleAdminCommand(auth: ChallengeAuth, input: AdminCommandInput
         replies: [t("cmd.togglefooter.ok", { state: next ? t("cmd.togglefooter.hidden") : t("cmd.togglefooter.shown") })],
         notifications: [],
         effects: [{ kind: "hideStatusFooter", value: next }],
+      });
+    }
+
+    case "/togglemention": {
+      // 终答点名提问人(行首 @user:server + MSC3089 m.mentions):他不在房间里
+      // 盯着也能被通知到。与 /togglefooter 同契约 —— 只回传效果,落盘归调用方。
+      const next = !input.mentionAsker;
+      return handled({
+        replies: [t("cmd.togglemention.ok", { state: next ? t("cmd.togglemention.on") : t("cmd.togglemention.off") })],
+        notifications: [],
+        effects: [{ kind: "mentionAsker", value: next }],
       });
     }
 

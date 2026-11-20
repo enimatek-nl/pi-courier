@@ -48,6 +48,9 @@ const en: Record<MessageKey, string> = {
   "cmd.togglefooter.ok": "📝 Status footer {state} in replies",
   "cmd.togglefooter.hidden": "hidden",
   "cmd.togglefooter.shown": "shown",
+  "cmd.togglemention.ok": "📣 Mentioning the asker at the top of final answers: {state}",
+  "cmd.togglemention.on": "on",
+  "cmd.togglemention.off": "off",
   "cmd.revoke.usage": "Usage: /revoke <userId> or /revoke <transport:userId>",
   "cmd.revoke.ok": "🔓 Revoked trust for {userId}",
   "cmd.revoke.notify": "Revoked: {userId}",
@@ -517,6 +520,7 @@ const en: Record<MessageKey, string> = {
     "• `/revoke <user>` — revoke a user's trusted status\n" +
     "• `/toggletools` — toggle tool-call visibility (when hidden, tool calls stop appearing in the chat)\n" +
     "• `/togglefooter` — toggle the status footer (the `📂 path · 📜 context · 🤖 model` line under each final answer)\n" +
+    "• `/togglemention` — toggle tagging the asker (`@user:server` plus a real mention, so they get notified) at the top of each final answer\n" +
     "\n" +
     "【Multi-project & projects】(management room)\n" +
     "• `/multiproject on|off` — multi-project mode toggle (restart to apply)\n" +

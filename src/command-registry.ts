@@ -87,6 +87,9 @@ export const COMMAND_REGISTRY: readonly CommandPolicy[] = [
   // 全局显示偏好(DM 管理面):项目房内无覆盖 —— 脚注只挂终答,逐房开关
   // 没有意义(与 hideToolCalls 的房级覆盖不同)。
   { name: "/togglefooter", guest: "blocked", stage: "adminCommands" },
+  // 同样是全局显示/通知偏好(spec #364):它改变的是「谁被通知」,所以
+  // 访客一样硬拦 —— 别人不能替房间打开对他的点名。
+  { name: "/togglemention", guest: "blocked", stage: "adminCommands" },
   // 主动外发(访客禁)
   { name: "/remind", guest: "blocked", stage: "slashCommands" },
   // MCP 服务器管理(spec #246,访客禁:配 MCP = 给 agent 加工具/外发通道,

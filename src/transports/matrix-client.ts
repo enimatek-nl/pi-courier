@@ -46,6 +46,10 @@ export interface MatrixMessageContent {
    *  event_id being replaced; annotation (rel_type "m.annotation") adds the
    *  reaction `key` (m.reaction events, 票01 #268). */
   "m.relates_to"?: { rel_type: string; event_id: string; key?: string };
+  /** MSC3089 结构化点名(MSC3952 同一路线):客户端靠它决定要不要通知这个
+   *  人,正文里的 `@user:server` 不算。只在显式点名时携带(spec #364),
+   *  入站方向本桥已读(matrix-events.ts)。 */
+  "m.mentions"?: { user_ids: string[] };
 }
 
 /** Events the adapters subscribe to. room.join / room.leave deliver only

@@ -443,6 +443,30 @@ describe("handleAdminCommand (pure in/out)", () => {
     expect(shownAgain.effects).toEqual([{ kind: "hideStatusFooter", value: false }]);
   });
 
+  // 终答点名(spec #364):同一个 read-then-flip 契约,但字段是**正**的 ——
+  // 传 false 出来 true(= 开始点名),传 true 出来 false。
+  it("/togglemention flips the asker-mention preference as an effect", () => {
+    const { auth } = makeEngine();
+    const on = handleAdminCommand(auth, {
+      text: "/togglemention",
+      userId: "@barry:server",
+      transport: "matrix",
+      mentionAsker: false,
+    });
+    expect(on.handled).toBe(true);
+    expect(on.effects).toEqual([{ kind: "mentionAsker", value: true }]);
+    expect(on.replies.length).toBe(1);
+    expect(on.replies[0]).toContain("📣");
+
+    const off = handleAdminCommand(auth, {
+      text: "/togglemention",
+      userId: "@barry:server",
+      transport: "matrix",
+      mentionAsker: true,
+    });
+    expect(off.effects).toEqual([{ kind: "mentionAsker", value: false }]);
+  });
+
   it("/revoke emits a warning notification plus persistAuth and the powerDemote effect; unknown users reply only", () => {
     const { auth } = makeEngine();
     const ok = handleAdminCommand(auth, { text: "/revoke @carol:server", userId: "@barry:server", transport: "matrix" });

@@ -39,7 +39,7 @@ import type { JsonStateFile } from "../state/json-file.js";
 import { formatBytes } from "../transports/attachments.js";
 import type { RoomOps } from "../transports/interface.js";
 import type { MatrixReaction } from "../transports/matrix.js";
-import type { ExternalMessage, MessageAttachment, ReplyTarget } from "../types.js";
+import type { ExternalMessage, MessageAttachment, ReplyTarget, SendOptions } from "../types.js";
 import type { UpdateOrchestrator } from "../update/updater.js";
 import { workflowCardLabels } from "../workflow/render.js";
 import type { PersistedAttachmentEntry } from "./attachment-ledger.js";
@@ -76,8 +76,9 @@ export interface MessageRouterDeps {
   /** Multi-project routing: resolves the PiRpc for a room (default when unmapped). */
   projectManager: ProjectManager;
   auth: ChallengeAuth;
-  /** Send a text reply to a chat via a transport (errors swallowed by caller) */
-  sendReply: (chatId: string, transport: string, text: string) => Promise<void>;
+  /** Send a text reply to a chat via a transport (errors swallowed by caller).
+   *  `opts` 只有终答点名一处给(spec #364),其余调用点不传。 */
+  sendReply: (chatId: string, transport: string, text: string, opts?: SendOptions) => Promise<void>;
   /** Best-effort typing indicator (silent no-op when unavailable) */
   sendTyping: (chatId: string, transport: string, active?: boolean) => Promise<void>;
   /** Injected config store — the single runtime read/write path. */
@@ -934,6 +935,7 @@ export function createMessageRouter(deps: MessageRouterDeps): MessageRouter {
           chatId: msg.chatId,
           hideToolCalls: store.get().hideToolCalls,
           hideStatusFooter: store.get().hideStatusFooter,
+          mentionAsker: store.get().mentionAsker,
         });
         if (!result.handled) return false;
         // 审计(issue #124):纯模块裁决事件名,router 落账 —— 认证与信任
@@ -954,6 +956,8 @@ export function createMessageRouter(deps: MessageRouterDeps): MessageRouter {
             store.update({ hideToolCalls: effect.value });
           } else if (effect.kind === "hideStatusFooter") {
             store.update({ hideStatusFooter: effect.value });
+          } else if (effect.kind === "mentionAsker") {
+            store.update({ mentionAsker: effect.value });
           } else if (effect.kind === "spaceInvite" && roomOps) {
             // Trust just granted (challenge passed): invite into the
             // organizational space — fire-once, best-effort (see space-topology.ts).
@@ -1593,7 +1597,7 @@ export function createMessageRouter(deps: MessageRouterDeps): MessageRouter {
             // rpc follows its latest prompter.
             bindReplyTarget(
               rpc,
-              { chatId: msg.chatId, transport: msg.transport, username: msg.username },
+              { chatId: msg.chatId, transport: msg.transport, username: msg.username, userId: msg.userId },
               projectManager.isProjectRoom(msg.chatId)
             );
             return rpc;
@@ -1809,9 +1813,20 @@ export function createMessageRouter(deps: MessageRouterDeps): MessageRouter {
               index === chunks.length - 1 ? appendStatusFooter(chunk, footer) : chunk
             );
           }
-          for (const chunk of outgoing) {
-            sendReply(target.chatId, target.transport, chunk).catch(() => {});
-          }
+          // 点名提问人(spec #364):/togglemention 开时,终答首片行首附上他的
+          // `@user:server`,MSC3089 的 m.mentions 也只随那一片 —— 通知按事件
+          // 计,所以分片长文恰好点一次。工具循环的中间消息不点名(否则一步
+          // 一条通知);关掉时终答与未启用时逐字节一致。
+          const mention = !turn.pendingTools && store.get().mentionAsker ? target.userId : undefined;
+          outgoing.forEach((chunk, index) => {
+            const tag = index === 0 ? mention : undefined;
+            sendReply(
+              target.chatId,
+              target.transport,
+              tag ? `${tag}\n${chunk}` : chunk,
+              tag ? { mentionUserIds: [tag] } : undefined
+            ).catch(() => {});
+          });
         };
         void dispatch();
 
