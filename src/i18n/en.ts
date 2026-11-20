@@ -51,6 +51,9 @@ const en: Record<MessageKey, string> = {
   "cmd.togglemention.ok": "📣 Mentioning the asker at the top of final answers: {state}",
   "cmd.togglemention.on": "on",
   "cmd.togglemention.off": "off",
+  "cmd.togglereads.ok": "👁 Read receipts: {state}",
+  "cmd.togglereads.on": "on — senders see their message as read",
+  "cmd.togglereads.off": "off — the bridge never marks anything read",
   "cmd.revoke.usage": "Usage: /revoke <userId> or /revoke <transport:userId>",
   "cmd.revoke.ok": "🔓 Revoked trust for {userId}",
   "cmd.revoke.notify": "Revoked: {userId}",
@@ -521,6 +524,7 @@ const en: Record<MessageKey, string> = {
     "• `/toggletools` — toggle tool-call visibility (when hidden, tool calls stop appearing in the chat)\n" +
     "• `/togglefooter` — toggle the status footer (the `📂 path · 📜 context · 🤖 model` line under each final answer)\n" +
     "• `/togglemention` — toggle tagging the asker (`@user:server` plus a real mention, so they get notified) at the top of each final answer\n" +
+    "• `/togglereads` — toggle read receipts (the `seen` marker that tells the sender the bridge read their message; on by default)\n" +
     "\n" +
     "【Multi-project & projects】(management room)\n" +
     "• `/multiproject on|off` — multi-project mode toggle (restart to apply)\n" +

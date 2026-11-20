@@ -46,7 +46,7 @@ Element/FluffyChat 的 @ 点名牌(pill)在 `content.body` 里往往**只写展�
   (`src/auth/challenge-auth.ts`):`/enable` 的两条路径、setup 向导、配置里的
   存储形式都从这里取,新增一档只改一处;不是登记词的一律返 `undefined`,
   调用方回用法行。大小写敏感 —— 模式串同时是配置文件里的存储形式。
-- **判定落点仍是 `shouldRespondByMode` 单一 switch**:`mentions-trusted` 就一行
+- **判定落点仍是 `ChallengeAuth.checkAuthorization` 里的单一 switch**(群聊分支,先看频道启用再看模式):`mentions-trusted` 就一行
   `wasMentioned && trustedUsers.has(...)`。它与 `trusted-only` 的唯一差别就是
   这道点名门,与 `mentions` 的唯一差别就是这道信任门。
 - **谁能开**:`/enable` 只把 `all` 留给管理员(`mode === "all" && !isAdmin` 才拦),

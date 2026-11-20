@@ -467,6 +467,29 @@ describe("handleAdminCommand (pure in/out)", () => {
     expect(off.effects).toEqual([{ kind: "mentionAsker", value: false }]);
   });
 
+  // 已读回执缺省是**开**的(router 传生效值进来),所以这里钉的是翻转语义:
+  // true → false,再翻回 true。
+  it("/togglereads flips the read-receipt preference as an effect", () => {
+    const { auth } = makeEngine();
+    const off = handleAdminCommand(auth, {
+      text: "/togglereads",
+      userId: "@barry:server",
+      transport: "matrix",
+      readReceipts: true,
+    });
+    expect(off.handled).toBe(true);
+    expect(off.effects).toEqual([{ kind: "readReceipts", value: false }]);
+    expect(off.replies[0]).toContain("👁");
+
+    const on = handleAdminCommand(auth, {
+      text: "/togglereads",
+      userId: "@barry:server",
+      transport: "matrix",
+      readReceipts: false,
+    });
+    expect(on.effects).toEqual([{ kind: "readReceipts", value: true }]);
+  });
+
   it("/revoke emits a warning notification plus persistAuth and the powerDemote effect; unknown users reply only", () => {
     const { auth } = makeEngine();
     const ok = handleAdminCommand(auth, { text: "/revoke @carol:server", userId: "@barry:server", transport: "matrix" });

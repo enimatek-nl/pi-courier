@@ -195,6 +195,25 @@ describe("MatrixProvider.connect", () => {
     expect(content["m.mentions"]).toEqual({ user_ids: ["@ok:server"] });
   });
 
+  // 已读回执(spec:docs/specs/read-receipts.md):尽力而为 —— 未连接、缺 id、
+  // 服务器报错都只能静默,它永远不是回复的前置条件。
+  it("markRead:把读序标到指定事件;未连接、缺 id、服务器报错均静默不抛", async () => {
+    const { provider, clients } = makeProvider();
+    await provider.markRead(ROOM, "$before"); // 未连接:什么都不能发生
+    expect(clients).toHaveLength(0);
+
+    await provider.connect();
+    const client = clients[0];
+    await provider.markRead(ROOM, "$one");
+    expect(client.sendReadReceipt).toHaveBeenCalledWith(ROOM, "$one");
+
+    await expect(provider.markRead(ROOM, "")).resolves.toBeUndefined();
+    expect(client.sendReadReceipt).toHaveBeenCalledTimes(1);
+
+    client.sendReadReceipt.mockRejectedValue(new Error("M_UNKNOWN"));
+    await expect(provider.markRead(ROOM, "$two")).resolves.toBeUndefined();
+  });
+
   it("encryptionAvailable 跟随端口 crypto 成员的有无", async () => {
     const withCrypto = makeProvider({ queue: [fakeMatrixClient({ crypto: fakeCrypto() })] });
     await withCrypto.provider.connect();

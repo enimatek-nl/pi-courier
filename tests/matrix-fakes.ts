@@ -30,6 +30,7 @@ export interface FakeMatrixClient {
   sendMessage: ReturnType<typeof vi.fn>;
   sendReaction: ReturnType<typeof vi.fn>;
   setTyping: ReturnType<typeof vi.fn>;
+  sendReadReceipt: ReturnType<typeof vi.fn>;
   createRoom: ReturnType<typeof vi.fn>;
   sendStateEvent: ReturnType<typeof vi.fn>;
   getRoomStateEvent: ReturnType<typeof vi.fn>;
@@ -78,6 +79,7 @@ export function fakeMatrixClient(overrides: Record<string, unknown> = {}): FakeM
     sendMessage: rec("sendMessage", async () => "$sent"),
     sendReaction: rec("sendReaction", async () => "$reaction"),
     setTyping: rec("setTyping", async () => undefined),
+    sendReadReceipt: rec("sendReadReceipt", async () => ({})),
     createRoom: rec("createRoom", async () => "!created:server"),
     sendStateEvent: rec("sendStateEvent", async () => "$state"),
     getRoomStateEvent: rec("getRoomStateEvent", async () => ({})),

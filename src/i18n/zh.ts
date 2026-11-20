@@ -54,6 +54,9 @@ const zh = {
   "cmd.togglemention.ok": "📣 终答开头点名提问者:{state}",
   "cmd.togglemention.on": "已开启",
   "cmd.togglemention.off": "已关闭",
+  "cmd.togglereads.ok": "👁 已读回执:{state}",
+  "cmd.togglereads.on": "已开启(对方能看到自己那条已被读)",
+  "cmd.togglereads.off": "已关闭(桥不再标记任何已读)",
   "cmd.revoke.usage": "用法: /revoke <userId> 或 /revoke <transport:userId>",
   "cmd.revoke.ok": "🔓 已撤销 {userId} 的信任",
   "cmd.revoke.notify": "已撤销:{userId}",
@@ -504,6 +507,7 @@ const zh = {
     "• `/toggletools` — 切换工具调用的显示/隐藏(隐藏后群里不刷 tool call)\n" +
     "• `/togglefooter` — 切换回复末尾状态脚注的显示/隐藏(终答下方 `📂 路径 · 📜 上下文 · 🤖 模型` 那一行)\n" +
     "• `/togglemention` — 切换终答开头是否点名提问者(`@user:server` + 真实点名标记,对方一定能收到通知)\n" +
+    "• `/togglereads` — 切换已读回执(那条「已读」标记 —— 缺省开)\n" +
     "\n" +
     "【多工程与项目】(管理房间)\n" +
     "• `/multiproject on|off` — 多工程模式开关(重启生效)\n" +

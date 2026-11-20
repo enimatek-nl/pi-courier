@@ -115,6 +115,13 @@ export interface MsgBridgeConfig {
    */
   mentionAsker?: boolean;
   /**
+   * 已读回执(readReceipts,docs/specs/read-receipts.md):**缺省开**。开启后
+   * 桥在受理一条消息(过了授权门、真的要看它)时把本房读序标到那条事件,
+   * 发送方的客户端因此显示「已读」—— 与 typing 同族:一个说「它在动」,
+   * 一个说它看到了哪条。false = 从不发回执(房间里的读序不再动)。
+   */
+  readReceipts?: boolean;
+  /**
    * 工具循环中间回合聚合(issue #235):默认开启 —— 中间回合不再逐条刷屏,
    * 而是聚合进同一张「工作中」的活卡持续就地刷新(Matrix MSC2676 消息编辑),
    * 终答回合仍是独立新消息。false = 完全旁路,与旧版逐条发送逐字节一致。

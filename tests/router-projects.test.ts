@@ -28,8 +28,13 @@ function textMessage(text: string): AssistantMessage {
  * channel modes) are under test. barry = admin + trusted; carol = trusted
  * non-admin; rooms pre-listed in `channels` are enabled.
  */
-function makeFixtures(opts: { multiProject?: boolean; managementRoomAdoptionAllowed?: () => boolean; space?: { enabled?: boolean; roomId?: string; invitedUsers?: string[] }; channels?: Record<string, { enabled: boolean; mode: "all" | "mentions" | "trusted-only" }>; hideStatusFooter?: boolean; mentionAsker?: boolean } = {}) {
+function makeFixtures(opts: { multiProject?: boolean; managementRoomAdoptionAllowed?: () => boolean; space?: { enabled?: boolean; roomId?: string; invitedUsers?: string[] }; channels?: Record<string, { enabled: boolean; mode: "all" | "mentions" | "mentions-trusted" | "trusted-only" }>; hideStatusFooter?: boolean; mentionAsker?: boolean; readReceipts?: boolean } = {}) {
   const codeBox: { current: string | null } = { current: null };
+  // 已读回执走单独一条缝(spec:read-receipts.md),记在单独一张表里。
+  const marks: Array<{ chatId: string; messageId: string }> = [];
+  const markRead = async (chatId: string, messageId: string) => {
+    marks.push({ chatId, messageId });
+  };
   // 点名是出站选项而非正文的一部分,所以这里把它单独记一笔 —— 断言才能
   // 分开钉「正文里有没有 @」和「这一条带不带 m.mentions」。
   const replies: Array<{ chatId: string; transport: string; text: string; mentionUserIds?: string[] }> = [];
@@ -71,6 +76,7 @@ function makeFixtures(opts: { multiProject?: boolean; managementRoomAdoptionAllo
     ...(opts.space ? { space: opts.space } : {}),
     ...(opts.hideStatusFooter ? { hideStatusFooter: true } : {}),
     ...(opts.mentionAsker ? { mentionAsker: true } : {}),
+    ...(opts.readReceipts === undefined ? {} : { readReceipts: opts.readReceipts }),
   }, () => {});
   const auth = new ChallengeAuth(
     (code) => {
@@ -116,6 +122,7 @@ function makeFixtures(opts: { multiProject?: boolean; managementRoomAdoptionAllo
     sendReply,
     extra: {
       sendTyping,
+      markRead,
       ...(opts.managementRoomAdoptionAllowed ? { managementRoomAdoptionAllowed: opts.managementRoomAdoptionAllowed } : {}),
     },
   });
@@ -124,6 +131,7 @@ function makeFixtures(opts: { multiProject?: boolean; managementRoomAdoptionAllo
   return {
     codeBox,
     replies,
+    marks,
     sendReply,
     sendTyping,
     rpc,
@@ -593,6 +601,42 @@ describe("message-router multi-project routing", () => {
     const finalMessage = fx.replies.at(-1)!;
     expect(finalMessage.text).toBe("all done");
     expect(finalMessage.mentionUserIds).toBeUndefined();
+  });
+
+  // 已读回执(spec:docs/specs/read-receipts.md):授权过了才标 —— 回执说的
+  // 是「桥看到了这一条」,被模式门挡下的消息井不读它。
+  it("an accepted message is marked read (readReceipts defaults on)", async () => {
+    const fx = makeFixtures();
+    const router = fx.makeRouter();
+    const msg = makeMsg({ text: "hi" });
+    await router.handleIncoming(msg);
+
+    expect(fx.marks).toEqual([{ chatId: "!dm:server", messageId: msg.messageId }]);
+  });
+
+  it("a mode-blocked group message gets no read receipt", async () => {
+    const fx = makeFixtures({ channels: { "!group:server": { enabled: true, mode: "mentions-trusted" } } });
+    const router = fx.makeRouter();
+    await router.handleIncoming(
+      makeMsg({
+        chatId: "!group:server",
+        isGroupChat: true,
+        wasMentioned: true,
+        userId: "@stranger:server",
+        username: "stranger",
+        text: "@bot hi",
+      })
+    );
+
+    expect(fx.marks).toEqual([]);
+  });
+
+  it("readReceipts: false never marks anything read", async () => {
+    const fx = makeFixtures({ readReceipts: false });
+    const router = fx.makeRouter();
+    await router.handleIncoming(makeMsg({ text: "hi" }));
+
+    expect(fx.marks).toEqual([]);
   });
 
   it("a >4000-char final answer splits and only the last chunk carries the footer", async () => {

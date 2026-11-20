@@ -81,6 +81,9 @@ export interface MessageRouterDeps {
   sendReply: (chatId: string, transport: string, text: string, opts?: SendOptions) => Promise<void>;
   /** Best-effort typing indicator (silent no-op when unavailable) */
   sendTyping: (chatId: string, transport: string, active?: boolean) => Promise<void>;
+  /** 已读回执(spec:docs/specs/read-receipts.md):把房间读序标到这条事件。
+   *  尽力而为 —— 没有这个能力(非 Matrix 部署)就没有回执,其他一切照旧。 */
+  markRead?: (chatId: string, messageId: string) => Promise<void>;
   /** Injected config store — the single runtime read/write path. */
   store: ConfigStore;
   /** Room-management capability (Matrix). Optional: absent in single-project
@@ -323,7 +326,7 @@ function attachmentErrorReply(reason: string): string {
 /** 审计 detail 的单行化契约:空白归一 + 120 截断(上限只在这里出现)。 */
 
 export function createMessageRouter(deps: MessageRouterDeps): MessageRouter {
-  const { projectManager, auth, sendReply, sendTyping, roomOps, store, pmctl, managementRoomAdoptionAllowed } = deps;
+  const { projectManager, auth, sendReply, sendTyping, markRead, roomOps, store, pmctl, managementRoomAdoptionAllowed } = deps;
   const bindings = new WeakMap<PiRpc, RoomBinding>();
   const bindReplyTarget = (rpc: PiRpc, replyTarget: ReplyTarget, pinned: boolean): void => {
     bindings.set(rpc, { pinned, replyTarget });
@@ -792,6 +795,12 @@ export function createMessageRouter(deps: MessageRouterDeps): MessageRouter {
           async (cId, replyText) => sendReply(cId, ctx.msg.transport, replyText),
           ctx.msg.transport
         );
+        // 已读回执:授权过了才算「桥确实看到了这一条」—— 群聊里被模式门
+        // 挡下的消息不发(那本就不读)。尽力而为、失败静默;开关缺省开
+        // (readReceipts: false 才关),回执不是任何回复的前置条件。
+        if (markRead && ctx.isAuthorized && store.get().readReceipts !== false) {
+          void markRead(ctx.msg.chatId, ctx.msg.messageId).catch(() => {});
+        }
         return false;
       },
     },
@@ -936,6 +945,9 @@ export function createMessageRouter(deps: MessageRouterDeps): MessageRouter {
           hideToolCalls: store.get().hideToolCalls,
           hideStatusFooter: store.get().hideStatusFooter,
           mentionAsker: store.get().mentionAsker,
+          // 缺省未写 = 开,所以这里传**生效值**而非原始字段:否则新鲜配置上第一次
+          // 翻转会从「(未写)开」翻成「显式开」—— 看起来像命令没反应。
+          readReceipts: store.get().readReceipts !== false,
         });
         if (!result.handled) return false;
         // 审计(issue #124):纯模块裁决事件名,router 落账 —— 认证与信任
@@ -958,6 +970,8 @@ export function createMessageRouter(deps: MessageRouterDeps): MessageRouter {
             store.update({ hideStatusFooter: effect.value });
           } else if (effect.kind === "mentionAsker") {
             store.update({ mentionAsker: effect.value });
+          } else if (effect.kind === "readReceipts") {
+            store.update({ readReceipts: effect.value });
           } else if (effect.kind === "spaceInvite" && roomOps) {
             // Trust just granted (challenge passed): invite into the
             // organizational space — fire-once, best-effort (see space-topology.ts).

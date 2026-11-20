@@ -86,6 +86,10 @@ export interface MatrixClientPort {
    *  reaction 事件自己的 event_id。 */
   sendReaction(roomId: string, eventId: string, key: string): Promise<string>;
   setTyping(roomId: string, typing: boolean, timeoutMs?: number): Promise<unknown>;
+  /** 已读回执(MSC2228 的 `m.receipt`,EDU 而非事件):把房间读序标到
+   *  `eventId` 为止 —— 发送方的客户端因此能显示「已读」。SDK 同名方法直接
+   *  满足本端口(与 setTyping 同款结构型)。 */
+  sendReadReceipt(roomId: string, eventId: string): Promise<unknown>;
 
   // ── 媒体 ──
   // 附件下载不走端口:SDK 的 downloadContent/decryptMedia 都是整包进内存后

@@ -221,7 +221,8 @@ pi 0.83.0 就绪。
 - 审计 trails(issue #124):`auditTrail` 统一记账口,八处接线(配对成败/trusted/revoke 经 admin-commands 纯模块返回的 `audit` 裁决字段;`!` `/bash` `/bashstop` `/reload` 按 slashCommands/bashBang 的命令名;`/login` 家族;`/pmctl rm`;queue.clear 走命令层的 audit 缝按真实语义上报;backlog.execute 在 执行 放行处)——登记表 `AUDIT_EVENTS` 集中常量,漏登记=快照测试红
 - 模型降级链(issue #121):turn_end 的 `stopReason==="error"` 喂 per-rpc 连败计数(其余轮次清零,工具循环中间轮算成功),连败 2 轮触发自动 `setModel` 沿链推进(项目房 `projectFallbacks` > 全局 `modelFallbackChain`,链空=功能关逐字节回归);回执带 from→to 与手动切回提示,审计 `model.fallback`(actor=system);链耗尽只提示一次(exhaustedNotified,成功轮重武装);切换失败(setModel 抛)发切换失败回执不计审计;计数 WeakMap 仅内存,重启归零可接受
 - typing 指示:`agent_start` / `turn_start` 触发 Matrix 输入中状态;工具流关闭的房间由事件流 5s 节流续期,另由回合期间的 7s 心跳定时器兜住——Matrix typing 只活 10s,长跑工具调用期间不产生事件,光靠事件续期会在十分后无声消失(issue #363);turn_end / 会话重启 / 本房改回活卡均主动停心跳;管理房判定走 config 的 `managementRoomId` 派生、收养写走 `adoptManagementRoom`(spec #99/#102),收养品牌逻辑在 space.ts
-- 房间模式 mentions-trusted(点名 ∩ 信任):`CHANNEL_MODES` 是模式唯一登记表、`parseChannelMode` 是唯一解析点(/enable 两条路径、setup 向导与配置里的存储形式同源于此,新增一档只改一处);判定落进 `shouldRespondByMode` 的单一 switch —— `wasMentioned && trustedUsers.has(...)`:与 `mentions` 差一道信任门,与 `trusted-only` 差一道点名门;`/enable` 只把 `all` 留给管理员,所以这一档信任用户就能开(它是收紧,不是放宽);点名判定 = 文本 `@` 或 MSC3089 `content["m.mentions"].user_ids`(仅群聊分支计算,`contentMentionsBot` 对形状宽容、绝不抛)—— Element/FluffyChat 的点名牌与手打 MXID 等价(docs/specs/room-mode-mentions-trusted.md)
+- 已读回执(`markRead` 缝,缺省开,`/togglereads` 可关):授权门之后才发 —— `checkAuthorization` 返 true 才算「桥接下来真要看这条」,群聊里被模式门挡下的消息不发;`MatrixClientPort.sendReadReceipt` 结构型对齐 SDK 同名方法(EDU,非事件),不进 per-room 发送 FIFO(回执不需要与时间线保序,排在长队后面只会迟到);三层静默(未连接/缺 id 直接返、SDK 抛错只记 debug、router 再兜一层 catch)—— 回执永远不是回复的前置条件(docs/specs/read-receipts.md)
+- 房间模式 mentions-trusted(点名 ∩ 信任):`CHANNEL_MODES` 是模式唯一登记表、`parseChannelMode` 是唯一解析点(/enable 两条路径、setup 向导与配置里的存储形式同源于此,新增一档只改一处);判定落进 `ChallengeAuth.checkAuthorization` 群聊分支的单一 switch —— `wasMentioned && trustedUsers.has(...)`:与 `mentions` 差一道信任门,与 `trusted-only` 差一道点名门;`/enable` 只把 `all` 留给管理员,所以这一档信任用户就能开(它是收紧,不是放宽);点名判定 = 文本 `@` 或 MSC3089 `content["m.mentions"].user_ids`(仅群聊分支计算,`contentMentionsBot` 对形状宽容、绝不抛)—— Element/FluffyChat 的点名牌与手打 MXID 等价(docs/specs/room-mode-mentions-trusted.md)
 
 **`src/rpc/queue-snapshots.ts`** —— 队列快照存储 + 启动消费(issue #115 阶段2)
 - `QueueSnapshotStore` 包在 JsonStateFile 上:按房间 replace-or-insert,空快照=移除(队列在任何活进程都不存在了,下次启动不得复活成丢失报告),残缺条目装载时静默跳过(与附件账本同一降级契约)
@@ -844,7 +845,7 @@ TypeError: webidl.util.markAsUncloneable is not a function
 Matrix 消息(transport 只做纯 I/O,不做授权判定)
   → 群聊 /enable(授权计算先行、授权生效在后 —— 未启用房间的消息正是靠本步骤在生效前启用房间;all 仅管理员)
     → 认证检查(trusted / challenge)
-      → bridge 管理命令(/trusted /revoke /channels /enable <chatId> /disable /toggletools /togglefooter /togglemention)
+      → bridge 管理命令(/trusted /revoke /channels /enable <chatId> /disable /toggletools /togglefooter /togglemention /togglereads)
         → /pmctl 家族(PmctlController:门禁 + new/list/show/rm/mv/rename;空间启用时 new 挂链、rm 先摘链再退房)
           → 登录管理(/login /logout /auth —— 仅管理员 + 管理房间,单工程模式 DM 即管理房间)
             → RPC 映射命令(/new /compact /model /queue /interrupt ...;DM /help 也在这里,统一输出 Pi 原生/桥增强/管理三组)

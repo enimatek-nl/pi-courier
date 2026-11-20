@@ -90,6 +90,9 @@ export const COMMAND_REGISTRY: readonly CommandPolicy[] = [
   // 同样是全局显示/通知偏好(spec #364):它改变的是「谁被通知」,所以
   // 访客一样硬拦 —— 别人不能替房间打开对他的点名。
   { name: "/togglemention", guest: "blocked", stage: "adminCommands" },
+  // 已读回执同属这一族(spec:read-receipts.md):它说的是「谁的消息被读了」,
+  // 同样轮不到访客来定。
+  { name: "/togglereads", guest: "blocked", stage: "adminCommands" },
   // 主动外发(访客禁)
   { name: "/remind", guest: "blocked", stage: "slashCommands" },
   // MCP 服务器管理(spec #246,访客禁:配 MCP = 给 agent 加工具/外发通道,

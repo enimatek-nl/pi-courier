@@ -49,6 +49,7 @@ describe("guest policy blocklist (issue #120)", () => {
         "/switch",
         "/thinking",
         "/togglefooter",
+        "/togglereads",
         "/togglemention",
         "/toggletools",
         "/trusted",

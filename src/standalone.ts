@@ -432,6 +432,11 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<void
   const sendTyping = async (chatId: string, _transport: string, active = true): Promise<void> => {
     if (matrix?.isConnected) await matrix.sendTyping(chatId, active);
   };
+  // 已读回执(spec:docs/specs/read-receipts.md):同样是尽力而为 —— 没连上就什幺
+  // 也不发生,transport 自己吞错,回执永远不是回复的前置条件。
+  const markRead = async (chatId: string, messageId: string): Promise<void> => {
+    if (matrix?.isConnected) await matrix.markRead(chatId, messageId);
+  };
   const disconnectAll = (): Promise<unknown> => (matrix ? matrix.disconnect() : Promise.resolve());
 
   // 配对码去向接线(票7,spec #99 #106):落地目标此刻才存在 —— 交给启动
@@ -631,6 +636,7 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<void
     auth,
     sendReply,
     sendTyping,
+    markRead,
     roomOps,
     store,
     pmctl,

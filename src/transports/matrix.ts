@@ -1,5 +1,6 @@
 import MarkdownIt from "markdown-it";
 import type { InboxMode } from "../config.js";
+import { errorMessage } from "../errors.js";
 import { escapeBackslashesOutsideFences } from "../formatting.js";
 import { t } from "../i18n/index.js";
 import { logger, suppressLogLines } from "../logger.js";
@@ -383,6 +384,22 @@ export class MatrixProvider {
       await this.client.setTyping(chatId, active, 10000);
     } catch {
       // Ignore typing indicator errors
+    }
+  }
+
+  /**
+   * 已读回执(spec:docs/specs/read-receipts.md):把本房的读序标到
+   * `messageId` —— 发件人那边因此显示「已读」。与 typing 同款**尽力而为**:
+   * 未连接/缺 event id 静默不抛,服务器报错只记 debug(回执永远不是
+   * 一条回复的前置条件)。不进 per-room 发送 FIFO:它不需要与消息保序,
+   * 排在一条长队后面只会让「已读」来得比它描述的那条消息还晚。
+   */
+  async markRead(chatId: string, messageId: string): Promise<void> {
+    if (!this.client || !chatId || !messageId) return;
+    try {
+      await this.client.sendReadReceipt(chatId, messageId);
+    } catch (err) {
+      logger.debug(`[Matrix] read receipt failed (${chatId}): ${errorMessage(err)}`);
     }
   }
 

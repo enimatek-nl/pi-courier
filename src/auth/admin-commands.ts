@@ -24,6 +24,8 @@ export type AdminEffect =
   /** 终答是否点名提问人(spec #364):与上面两个显示偏好同契约 —— 效果
    *  回传给调用方落盘,本模块不碰配置。注意它是**正**字段:true = 点名。 */
   | { kind: "mentionAsker"; value: boolean }
+  /** 已读回执开关(同上族):正语义,true = 发回执。 */
+  | { kind: "readReceipts"; value: boolean }
   /** Trust was just granted to this user via a passed challenge — the caller
    *  invites them into the organizational space (fire-once, best-effort). */
   | { kind: "spaceInvite"; userId: string; transport?: string }
@@ -56,6 +58,9 @@ export interface AdminCommandInput {
   /** Current asker-mention state (same read-then-flip contract, positive
    *  field: true = 终答点名)。 */
   mentionAsker?: boolean;
+  /** Current read-receipt state (same contract, positive: true = 发已读回执;
+   *  缺省未写 = 开,所以下一次翻转要仍到「关」)。 */
+  readReceipts?: boolean;
 }
 
 export interface AdminCommandResult {
@@ -224,6 +229,17 @@ export function handleAdminCommand(auth: ChallengeAuth, input: AdminCommandInput
         replies: [t("cmd.togglemention.ok", { state: next ? t("cmd.togglemention.on") : t("cmd.togglemention.off") })],
         notifications: [],
         effects: [{ kind: "mentionAsker", value: next }],
+      });
+    }
+
+    case "/togglereads": {
+      // 已读回执(MSC2228):开时对方看得到「pico 读到了哪条」。与上面两个
+      // 同契约;缺省是**开**,所以未写过这一项的配置翻转后落到「关」。
+      const next = !input.readReceipts;
+      return handled({
+        replies: [t("cmd.togglereads.ok", { state: next ? t("cmd.togglereads.on") : t("cmd.togglereads.off") })],
+        notifications: [],
+        effects: [{ kind: "readReceipts", value: next }],
       });
     }
 
