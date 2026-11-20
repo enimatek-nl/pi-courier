@@ -1,4 +1,15 @@
 /**
+ * 群聊房间的启用模式(房间授权门的唯一开关;解析与判定的家见
+ * `src/auth/challenge-auth.ts`)。四档语义互相独立,新增一档只需改那里:
+ * - `all`:所有成员的任何消息;
+ * - `mentions`:只接被 @ 的消息(任何成员,含陌生人);
+ * - `mentions-trusted`:只接「被 @ 且来自受信成员」的消息 —— 即 mentions 与
+ *   trusted-only 的交集:公共频道里陌生人 @ 不动,自己人也要 @ 才动;
+ * - `trusted-only`:只接收信成员的消息(不必被 @)。
+ */
+export type ChannelMode = "all" | "mentions" | "mentions-trusted" | "trusted-only";
+
+/**
  * Saved attachment reference (issue #66 票1): the transport has already
  * downloaded the bytes to disk before the message enters the router —
  * the path is absolute and readable by the pi subprocess.
@@ -86,7 +97,7 @@ export interface MsgBridgeConfig {
      *  trustedUsers 同;v1 手编配置 + 重启生效(与 projects 字段同策略)。 */
     guestUsers?: string[];
     adminUserId?: string;
-    channels?: Record<string, { enabled: boolean; mode: "all" | "mentions" | "trusted-only" }>;
+    channels?: Record<string, { enabled: boolean; mode: ChannelMode }>;
   };
   hideToolCalls?: boolean;
   /**

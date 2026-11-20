@@ -668,6 +668,47 @@ describe("message-router authorization pipeline (real ChallengeAuth)", () => {
     expect(rpc.prompt).not.toHaveBeenCalled();
   });
 
+  it("group /enable mentions-trusted: 只接受信成员的点名", async () => {
+    const router = makeRouter();
+    const room = "!group:server";
+    await router.handleIncoming(makeMsg({ chatId: room, isGroupChat: true, text: "/enable mentions-trusted" }));
+    expect(replies.at(-1)!.text).toContain("本房间已启用");
+    expect(replies.at(-1)!.text).toContain("mentions-trusted");
+
+    // 受信成员 + 点名 → 接活
+    await router.handleIncoming(
+      makeMsg({
+        chatId: room,
+        isGroupChat: true,
+        wasMentioned: true,
+        userId: "@carol:server",
+        username: "carol",
+        text: "@bot hello",
+      })
+    );
+    expect(rpc.prompt).toHaveBeenCalledWith("@bot hello");
+    (rpc.prompt as ReturnType<typeof vi.fn>).mockClear();
+
+    // 受信成员但没点名 → 静默
+    await router.handleIncoming(
+      makeMsg({ chatId: room, isGroupChat: true, userId: "@carol:server", username: "carol", text: "no mention" })
+    );
+    expect(rpc.prompt).not.toHaveBeenCalled();
+
+    // 陌生成员点名 → 静默
+    await router.handleIncoming(
+      makeMsg({
+        chatId: room,
+        isGroupChat: true,
+        wasMentioned: true,
+        userId: "@eve:server",
+        username: "eve",
+        text: "@bot ping",
+      })
+    );
+    expect(rpc.prompt).not.toHaveBeenCalled();
+  });
+
   it("group /enable all is admin-only: a trusted non-admin is rejected, the admin succeeds", async () => {
     const router = makeRouter();
     const room = "!group:server";

@@ -36,7 +36,7 @@ const zh = {
   "recap.card.context": "📜 上下文占用:{context}",
   "recap.cc.prefix": "📋 {project} 交接卡(项目干活日志)",
   // ── 桥管理命令回复(admin-commands.ts,此前为硬编码英文的 i18n 缺口)──
-  "cmd.enable.usage": "用法: /enable <chatId> <all|mentions|trusted-only>",
+  "cmd.enable.usage": "用法: /enable <chatId> <all|mentions|mentions-trusted|trusted-only>",
   "cmd.enable.ok": "✅ 频道 {chatId} 已启用(mode: {mode})",
   "cmd.enable.notify": "频道 {chatId} 已启用({mode})",
   "cmd.disable.usage": "用法: /disable <chatId>",
@@ -399,7 +399,7 @@ const zh = {
   "resilience.rpcLabelDefault": "默认进程",  "guest.denied": "🚫 此命令需要信任用户权限:{command}",
   "router.attach.saved": "📎 附件已保存: {path}({bytes})\n下一条消息发送时会自动附上它。",
   "router.payload.unsupported": "🤷 暂不支持的消息类型({msgtype}),已忽略。文字、图片和文件都可以直接发给我。",
-  "router.enable.usage": "用法: /enable <all|mentions|trusted-only>(本房间)",
+  "router.enable.usage": "用法: /enable <all|mentions|mentions-trusted|trusted-only>(本房间)",
   "router.unknownRoom.notice": "🤝 本 bot 被拉进未绑定项目的群聊 {room},按安全默认保持静默不接活。确认要协作后,把它绑定为项目房即自动上岗(协作认领流开发中,spec #299)。",
   "pmctl.new.metaFailed": "\n⚠️ 项目房元数据写入失败(不影响项目创建): {message}",
   "collab.claim.card":
@@ -428,7 +428,7 @@ const zh = {
   "pmctl.wt.usage": "用法: /pmctl wt <项目> <分支>(从该项目仓库现开 worktree 到项目根/<名>-<分支>,并开新项目房)",
   "pmctl.wt.exists": "❌ 目录已存在: {dir}(换分支名或先清理)",
   "pmctl.wt.fail": "❌ worktree 创建失败: {message}",
-  "router.enable.allAdminOnly": "❌ all 模式仅管理员可用(可采用 trusted-only 或 mentions)",
+  "router.enable.allAdminOnly": "❌ all 模式仅管理员可用(可采用 trusted-only、mentions 或 mentions-trusted)",
   "router.enable.ok": "✅ 本房间已启用 (mode: {mode})",
   "router.multiproject.forbidden": "❌ 无权限(仅信任用户可切换多工程模式)",
   "router.multiproject.currentOn": "多工程模式(开启)",
@@ -493,7 +493,7 @@ const zh = {
     "• `/auth` — 查看已保存的 provider 凭据\n" +
     "\n" +
     "【权限与房间】(信任用户)\n" +
-    "• `/enable <房间> <all|mentions|trusted-only>` — 在指定房间启用 bot(群聊里可直接发 `/enable <模式>`;all 模式需管理员)\n" +
+    "• `/enable <房间> <all|mentions|mentions-trusted|trusted-only>` — 在指定房间启用 bot(群聊里可直接发 `/enable <模式>`;all 模式需管理员;mentions-trusted 只接受信成员的 @ 点名)\n" +
     "• `/disable <房间>` — 停用指定房间\n" +
     "• `/channels` — 列出已启用的房间及模式\n" +
     "• `/trusted` — 列出信任用户名单\n" +

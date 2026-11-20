@@ -2,13 +2,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ChallengeAuth } from "../src/auth/challenge-auth";
 import { adminCommandHelpText, handleAdminCommand } from "../src/auth/admin-commands";
 import { matchesAdmin, matchesTrustedEntry } from "../src/identity";
+import type { ChannelMode } from "../src/types";
 
 /** Direct table tests for the auth strategy engine and the admin-command
  *  handler. The engine is a pure state machine (in-memory only, sender
  *  passed as a parameter), so expiry / lockout / revoke matching are
  *  testable without any I/O. */
 
-function makeEngine(channels: Record<string, { enabled: boolean; mode: "all" | "mentions" | "trusted-only" }> = {}) {
+function makeEngine(channels: Record<string, { enabled: boolean; mode: ChannelMode }> = {}) {
   let shownCode: string | null = null;
   const notifications: Array<{ message: string; level?: string }> = [];
   const auth = new ChallengeAuth(
@@ -265,6 +266,33 @@ describe("ChallengeAuth strategy engine", () => {
     ).toBe(false);
   });
 
+  it("mentions-trusted 要求点名与信任两个条件同时成立", async () => {
+    const { auth } = makeEngine({
+      "!room:server": { enabled: true, mode: "mentions-trusted" },
+    });
+    const ask = (userId: string, mentioned: boolean) =>
+      auth.checkAuthorization(
+        userId,
+        "!room:server",
+        userId.split(":")[0] ?? userId,
+        true,
+        mentioned,
+        undefined,
+        "matrix",
+      );
+    // 受信 + 点名 → 放行
+    expect(await ask("@barry:server", true)).toBe(true);
+    // 受信但没点名 → 静默(这是与 trusted-only 的全部区别)
+    expect(await ask("@barry:server", false)).toBe(false);
+    // 点名但不受信 → 静默(这是与 mentions 的全部区别)
+    expect(await ask("@eve:server", true)).toBe(false);
+    expect(await ask("@eve:server", false)).toBe(false);
+    // 未启用的房间照旧一律拒绝(点名也不行)
+    expect(await auth.checkAuthorization("@barry:server", "!other:server", "barry", true, true, undefined, "matrix")).toBe(
+      false,
+    );
+  });
+
   it("pairing codes come from a CSPRNG within the 6-digit domain (audit batch 1)", async () => {
     const codes: string[] = [];
     const auth = new ChallengeAuth((code) => codes.push(code), () => {});
@@ -347,6 +375,29 @@ describe("handleAdminCommand (pure in/out)", () => {
     expect(result.replies).toEqual(["✅ 频道 !group:server 已启用(mode: mentions)"]);
     expect(result.effects).toEqual([{ kind: "persistAuth" }]);
     expect(auth.isChannelEnabled("!group:server")).toBe(true);
+  });
+
+  it("/enable accepts mentions-trusted; unknown modes still fall back to the usage line", () => {
+    const { auth } = makeEngine();
+    const ok = handleAdminCommand(auth, {
+      text: "/enable !group:server mentions-trusted",
+      userId: "@barry:server",
+      transport: "matrix",
+    });
+    expect(ok.handled).toBe(true);
+    expect(ok.replies).toEqual(["✅ 频道 !group:server 已启用(mode: mentions-trusted)"]);
+    expect(ok.effects).toEqual([{ kind: "persistAuth" }]);
+    expect(auth.isChannelEnabled("!group:server")).toBe(true);
+
+    const bad = handleAdminCommand(auth, {
+      text: "/enable !other:server mentions-trust",
+      userId: "@barry:server",
+      transport: "matrix",
+    });
+    expect(bad.handled).toBe(true);
+    expect(bad.replies[0]).toContain("用法");
+    expect(bad.effects).toEqual([]);
+    expect(auth.isChannelEnabled("!other:server")).toBe(false);
   });
 
   it("/toggletools returns the flipped value as an effect (caller owns the store)", () => {

@@ -93,7 +93,10 @@ export function createEventTranslator(ports: EventTranslatorPorts) {
       ? stripReplyFallback(event.content.body)
       : event.content.body;
 
-    const wasMentioned = isGroupChat ? wasBotMentioned(messageText, botUserId) : false;
+    // 点名 = 文本里的 @ 或 m.mentions 的结构化点名标记(后者接展示名 pill)。
+    const wasMentioned = isGroupChat
+      ? wasBotMentioned(messageText, botUserId) || contentMentionsBot(event.content, botUserId)
+      : false;
     const cleanContent = wasMentioned && botUserId
       ? stripBotMention(messageText, botUserId)
       : messageText;
@@ -227,6 +230,18 @@ export function wasBotMentioned(messageText: string, botUserId: string): boolean
   if (!localpart) return false;
   const re = new RegExp(`@${escapeRegExp(localpart)}\\b`, "i");
   return re.test(messageText);
+}
+
+/**
+ * 结构化点名标记(MSC3089 `m.mentions`):客户端的 @ 点名牌(pill)在正文里
+ * 往往只写展示名,文本匹配根本认不出来 —— 靠点名才触发的房间(mentions /
+ * mentions-trusted)因此必须同时看这个字段。
+ * 形状宽容:缺字段 / 非数组 / 非字符串元素一律当“没点名”,绝不抛。
+ */
+export function contentMentionsBot(content: unknown, botUserId: string): boolean {
+  if (typeof botUserId !== "string" || botUserId === "") return false;
+  const ids = (content as { "m.mentions"?: { user_ids?: unknown } } | null)?.["m.mentions"]?.user_ids;
+  return Array.isArray(ids) && ids.some((id) => id === botUserId);
 }
 
 /** Strip bot mention from message text — symmetric with wasBotMentioned */

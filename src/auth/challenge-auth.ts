@@ -14,6 +14,7 @@ import { randomInt } from "node:crypto";
 import { errorMessage } from "../errors.js";
 import { t } from "../i18n/index.js";
 import { matchesAdmin, matchesTrustedEntry, namespacedId } from "../identity.js";
+import type { ChannelMode } from "../types.js";
 
 interface ChallengeData {
   code: string;
@@ -26,7 +27,17 @@ interface ChallengeData {
 
 interface ChannelAuth {
   enabled: boolean;
-  mode: "all" | "mentions" | "trusted-only";
+  mode: ChannelMode;
+}
+
+/** 房间模式的唯一登记表(四档语义见 types.ts 的 ChannelMode 注释):
+ *  /enable(两条路径)、setup 向导与解析函数共用,新增一档只改一处。 */
+export const CHANNEL_MODES: readonly ChannelMode[] = ["all", "mentions", "mentions-trusted", "trusted-only"];
+
+/** 房间模式的唯一解析点:不是已登记的模式词一律返 undefined(调用方回用法行),
+ *  不再各处手写三段字面量比较。大小写敏感 —— 模式串同时是配置里的存储形式。 */
+export function parseChannelMode(raw: string | undefined): ChannelMode | undefined {
+  return CHANNEL_MODES.find((mode) => mode === raw);
 }
 
 export type ChallengeOutcome = "authenticated" | "expired" | "wrong" | "blocked";
@@ -66,7 +77,7 @@ export class ChallengeAuth {
     trustedUsers?: string[];
     guestUsers?: string[];
     adminUserId?: string;
-    channels?: Record<string, { enabled: boolean; mode: "all" | "mentions" | "trusted-only" }>;
+    channels?: Record<string, { enabled: boolean; mode: ChannelMode }>;
   }): void {
     if (config.trustedUsers) {
       this.trustedUsers = new Set(config.trustedUsers);
@@ -89,7 +100,7 @@ export class ChallengeAuth {
     trustedUsers: string[];
     guestUsers: string[];
     adminUserId?: string;
-    channels: Record<string, { enabled: boolean; mode: "all" | "mentions" | "trusted-only" }>;
+    channels: Record<string, { enabled: boolean; mode: ChannelMode }>;
   } {
     return {
       trustedUsers: Array.from(this.trustedUsers),
@@ -157,6 +168,10 @@ export class ChallengeAuth {
         return true;
       case "mentions":
         return wasMentioned || false;
+      case "mentions-trusted":
+        // 点名与信任取交集:陌生人 @ 不动,受信成员也要 @ 才动
+        // (与 trusted-only 的唯一差别就是这道点名门)。
+        return wasMentioned && this.trustedUsers.has(namespacedUserId);
       case "trusted-only":
         return this.trustedUsers.has(namespacedUserId);
       default:
@@ -190,7 +205,7 @@ export class ChallengeAuth {
   }
 
   /** Enable a group chat with a mode (in-memory only; the caller persists). */
-  enableChannel(chatId: string, mode: "all" | "mentions" | "trusted-only"): void {
+  enableChannel(chatId: string, mode: ChannelMode): void {
     this.channelAuth.set(chatId, { enabled: true, mode });
   }
 

@@ -10,7 +10,7 @@ import * as path from "node:path";
 import type { AssistantMessage } from "@earendil-works/pi-ai";
 import { AUDIT_EVENTS, type AuditLog } from "../audit/audit-log.js";
 import { handleAdminCommand } from "../auth/admin-commands.js";
-import { type ChallengeAuth } from "../auth/challenge-auth.js";
+import { type ChallengeAuth, parseChannelMode } from "../auth/challenge-auth.js";
 import { guestCommandVerdict } from "../auth/guest-policy.js";
 import { LoginManager } from "../auth/headless-login.js";
 import { BotRegistry } from "../collab/bot-registry.js";
@@ -1001,8 +1001,10 @@ export function createMessageRouter(deps: MessageRouterDeps): MessageRouter {
         const isTrusted = auth.isTrustedUser(msg.userId, msg.transport);
         if (!isTrusted) return false;
         const parts = text.split(/\s+/);
-        const mode = (parts[1] || "trusted-only") as "all" | "mentions" | "trusted-only";
-        if (mode !== "all" && mode !== "mentions" && mode !== "trusted-only") {
+        // 模式缺省 trusted-only(旧行为);非法词回用法行 —— 解析单点在
+        // challenge-auth.parseChannelMode,新增一档不必改这里。
+        const mode = parts[1] ? parseChannelMode(parts[1]) : "trusted-only";
+        if (mode === undefined) {
           await sendReply(msg.chatId, msg.transport, t("router.enable.usage"));
           return true;
         }

@@ -241,6 +241,48 @@ describe("extractUsername", () => {
   });
 });
 
+describe("event translator — m.mentions 点名 pill(MSC3089)", () => {
+  it("m.mentions 命中 bot 就算点名,body 只写显示名也接得到", async () => {
+    const { translator } = makeTranslator({ groupChat: true });
+    const { message } = await translator.translate(
+      ROOM,
+      textEvent("帮忙看下这个报错", { "m.mentions": { user_ids: [BOT] } }),
+    );
+    expect(message?.wasMentioned).toBe(true);
+    // 无 @ 文本可剥:正文原样交给 pi
+    expect(message?.payload.kind === "text" && message.payload.text).toBe("帮忙看下这个报错");
+  });
+
+  it("m.mentions 只点名别人不算", async () => {
+    const { translator } = makeTranslator({ groupChat: true });
+    const { message } = await translator.translate(
+      ROOM,
+      textEvent("帮忙看下这个报错", { "m.mentions": { user_ids: ["@alice:server"] } }),
+    );
+    expect(message?.wasMentioned).toBe(false);
+  });
+
+  it("私聊里 m.mentions 不写 wasMentioned(私聊本就不走点名门)", async () => {
+    const { translator } = makeTranslator({ groupChat: false });
+    const { message } = await translator.translate(ROOM, textEvent("在吗", { "m.mentions": { user_ids: [BOT] } }));
+    expect(message?.wasMentioned).toBe(false);
+  });
+
+  it("m.mentions 形状异常只算没点名,绝不抛", async () => {
+    const { translator } = makeTranslator({ groupChat: true });
+    const weird = [
+      { "m.mentions": { user_ids: "nope" } },
+      { "m.mentions": { user_ids: null } },
+      { "m.mentions": null },
+      { "m.mentions": "bot" },
+    ];
+    for (const extra of weird) {
+      const { message } = await translator.translate(ROOM, textEvent("普通消息", extra));
+      expect(message?.wasMentioned).toBe(false);
+    }
+  });
+});
+
 describe("wasBotMentioned", () => {
   const botUserId = "@pibot:matrix.org";
 

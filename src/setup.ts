@@ -10,6 +10,7 @@
 
 import { stdin, stdout } from "node:process";
 import { createInterface } from "node:readline";
+import { parseChannelMode } from "./auth/challenge-auth.js";
 import {
   attachmentsDirectory,
   attachmentsMaxMb,
@@ -25,7 +26,7 @@ import { detectSystemLanguage } from "./i18n/detect.js";
 import type { Locale } from "./i18n/index.js";
 import { setLocale, t } from "./i18n/index.js";
 import { type ProxySettings, parseNoProxyList, resolveProxySettings } from "./proxy.js";
-import type { MsgBridgeConfig } from "./types.js";
+import type { ChannelMode, MsgBridgeConfig } from "./types.js";
 
 /**
  * Input abstraction that works in both modes:
@@ -292,20 +293,21 @@ export async function runSetup(): Promise<void> {
     // ---- 4.5 trusted rooms (optional) ---------------------------------------
     // Group chats need explicit channel authorization: trusted users in a
     // group are ignored unless the room is enabled. Format per room:
-    //   !room:server            (mode defaults to trusted-only)
-    //   !room:server:all|mentions|trusted-only
+    //   !room:server                          (mode defaults to trusted-only)
+    //   !room:server:<mode>                   (all|mentions|mentions-trusted|trusted-only)
     const roomsRaw = (await ask(t("setup.rooms.prompt"))).trim();
-    const rooms: Record<string, { enabled: boolean; mode: "all" | "mentions" | "trusted-only" }> = {};
+    const rooms: Record<string, { enabled: boolean; mode: ChannelMode }> = {};
     if (roomsRaw) {
       for (const part of roomsRaw.split(",")) {
         const p = part.trim();
         if (!p) continue;
         let room = p;
-        let mode: "all" | "mentions" | "trusted-only" = "trusted-only";
+        let mode: ChannelMode = "trusted-only";
         const last = p.split(":").pop() ?? "";
-        if (last === "all" || last === "mentions" || last === "trusted-only") {
+        const parsedMode = parseChannelMode(last);
+        if (parsedMode) {
           room = p.slice(0, p.length - last.length - 1);
-          mode = last;
+          mode = parsedMode;
         }
         if (!room.startsWith("!")) {
           console.log(t("setup.rooms.invalid", { room: p }));

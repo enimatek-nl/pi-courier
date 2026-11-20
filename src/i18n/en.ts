@@ -33,7 +33,7 @@ const en: Record<MessageKey, string> = {
   "recap.cc.prefix": "📋 {project} handoff card (project log)",
   // ── bridge admin command replies (admin-commands.ts; previously hardcoded
   //    English — the en strings keep the pre-i18n wording byte-identical) ──
-  "cmd.enable.usage": "Usage: /enable <chatId> <all|mentions|trusted-only>",
+  "cmd.enable.usage": "Usage: /enable <chatId> <all|mentions|mentions-trusted|trusted-only>",
   "cmd.enable.ok": "✅ Channel {chatId} enabled (mode: {mode})",
   "cmd.enable.notify": "Channel {chatId} enabled ({mode})",
   "cmd.disable.usage": "Usage: /disable <chatId>",
@@ -409,7 +409,7 @@ const en: Record<MessageKey, string> = {
   "router.attach.saved": "📎 Attachment saved: {path} ({bytes})\nIt will be attached automatically with your next message.",
   "router.payload.unsupported":
     "🤷 Unsupported message type ({msgtype}) — ignored. You can send text, images and files directly.",
-  "router.enable.usage": "Usage: /enable <all|mentions|trusted-only> (in this room)",
+  "router.enable.usage": "Usage: /enable <all|mentions|mentions-trusted|trusted-only> (in this room)",
   "router.unknownRoom.notice":
     "🤝 This bot was invited to group {room}, which is not bound to any project — per the safe default it stays silent. Bind it as a project room to activate it (claim flow in progress, spec #299).",
   "pmctl.new.metaFailed": "\n⚠️ Failed to write project-room metadata (the project was still created): {message}",
@@ -439,7 +439,8 @@ const en: Record<MessageKey, string> = {
   "pmctl.wt.usage": "Usage: /pmctl wt <project> <branch> (open a worktree of that repo at <root>/<name>-<branch> and create a project room)",
   "pmctl.wt.exists": "❌ Directory already exists: {dir} (pick another branch or clean up first)",
   "pmctl.wt.fail": "❌ Worktree creation failed: {message}",
-  "router.enable.allAdminOnly": "❌ The all mode is admin-only (use trusted-only or mentions instead)",
+  "router.enable.allAdminOnly":
+    "❌ The all mode is admin-only (use trusted-only, mentions or mentions-trusted instead)",
   "router.enable.ok": "✅ Room enabled (mode: {mode})",
   "router.multiproject.forbidden": "❌ Not allowed (only trusted users can toggle multi-project mode)",
   "router.multiproject.currentOn": "multi-project mode (on)",
@@ -509,7 +510,7 @@ const en: Record<MessageKey, string> = {
     "• `/auth` — view saved provider credentials\n" +
     "\n" +
     "【Permissions & rooms】(trusted users)\n" +
-    "• `/enable <room> <all|mentions|trusted-only>` — enable the bot in a room (in a group chat, sending `/enable <mode>` alone enables that group; the `all` mode requires the admin)\n" +
+    "• `/enable <room> <all|mentions|mentions-trusted|trusted-only>` — enable the bot in a room (in a group chat, sending `/enable <mode>` alone enables that group; the `all` mode requires the admin; `mentions-trusted` answers only mentions from trusted users)\n" +
     "• `/disable <room>` — disable a room\n" +
     "• `/channels` — list enabled rooms and their modes\n" +
     "• `/trusted` — list trusted users\n" +

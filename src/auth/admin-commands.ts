@@ -12,7 +12,7 @@
 
 import { t } from "../i18n/index.js";
 import { displayIdentity, namespacedId } from "../identity.js";
-import { type ChallengeAuth, MAX_PAIRING_ATTEMPTS, PAIRING_BLOCK_MINUTES } from "./challenge-auth.js";
+import { type ChallengeAuth, MAX_PAIRING_ATTEMPTS, PAIRING_BLOCK_MINUTES, parseChannelMode } from "./challenge-auth.js";
 
 export type AdminEffect =
   | { kind: "persistAuth" }
@@ -144,14 +144,14 @@ export function handleAdminCommand(auth: ChallengeAuth, input: AdminCommandInput
       if (parts.length < 3) {
         return handled({ replies: [t("cmd.enable.usage")], notifications: [], effects: [] });
       }
-      const mode = parts[2] as "all" | "mentions" | "trusted-only";
-      if (mode !== "all" && mode !== "mentions" && mode !== "trusted-only") {
+      const mode = parseChannelMode(parts[2]);
+      if (mode === undefined) {
         return handled({ replies: [t("cmd.enable.usage")], notifications: [], effects: [] });
       }
       auth.enableChannel(parts[1], mode);
       return handled({
-        replies: [t("cmd.enable.ok", { chatId: parts[1], mode: parts[2] })],
-        notifications: [{ message: t("cmd.enable.notify", { chatId: parts[1], mode: parts[2] }), level: "info" }],
+        replies: [t("cmd.enable.ok", { chatId: parts[1], mode })],
+        notifications: [{ message: t("cmd.enable.notify", { chatId: parts[1], mode }), level: "info" }],
         effects: [{ kind: "persistAuth" }],
       });
     }

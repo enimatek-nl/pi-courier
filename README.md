@@ -487,7 +487,18 @@ Supported: `m.image` / `m.file` / `m.audio` / `m.video` / stickers. Images are h
 - Encrypted rooms (E2EE) are supported — attachments are decrypted automatically
 - Unsupported types (e.g. location) get a polite notice; if the model itself lacks vision, pi will say so — that's the model, not the bridge
 
-**Group chats**: rooms with **more than 2 members** are silent by default — the bot posts a one-time hint when invited, then answers nothing until enabled. **Enable without the room ID**: send `/enable <all|mentions|trusted-only>` right in the group (trusted users only, defaults to `trusted-only`), or in a DM with `/enable <roomId> <mode>` (or add it during `setup`). Two-person rooms (you + the bot) answer automatically. Room IDs look like `!xxx:server`.
+**Group chats**: rooms with **more than 2 members** are silent by default — the bot posts a one-time hint when invited, then answers nothing until enabled. **Enable without the room ID**: send `/enable <mode>` right in the group (trusted users only, defaults to `trusted-only`), or in a DM with `/enable <roomId> <mode>` (or add it during `setup`). Two-person rooms (you + the bot) answer automatically. Room IDs look like `!xxx:server`.
+
+The mode decides what an enabled room picks up — and what it answers, always in that room only:
+
+| mode | answers |
+| --- | --- |
+| `all` | every member's message (only the admin may enable this) |
+| `mentions` | only messages that mention the bot, from any member |
+| `mentions-trusted` | only messages that mention the bot **and** come from a trusted user — the intersection of `mentions` and `trusted-only`: strangers pinging the bot in a shared channel get nothing, your own people still have to ask explicitly |
+| `trusted-only` | every message from trusted users, no mention needed |
+
+Mention detection accepts the written form (`@bot`, `@bot:server`) **and** the client's structured `m.mentions` pill (MSC3089) — clicking the bot's name in Element/FluffyChat triggers even when the message body only carries the display name — and the mention itself is stripped from the text before pi sees it.
 
 ### Guest access: chat without the keys
 
