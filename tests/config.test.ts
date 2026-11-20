@@ -16,6 +16,10 @@ describe('config', () => {
 
   beforeEach(() => {
     tmpDir = mkdtempSync(join(tmpdir(), 'pi-courier-config-'));
+    // PI_CLI_PATH 会被 loadConfig 折进 config.cliPath —— 测试显式清场,
+    // 否则从桥接器派生的 pi 子进程里跑测试(服务经 EnvironmentFile 注入了
+    // 这个变量)会凭空多出一个 cliPath 字段(同款清场见 doctor-fix.test.ts)。
+    delete process.env.PI_CLI_PATH;
     vi.resetModules();
   });
 
