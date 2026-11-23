@@ -674,8 +674,37 @@ self-signing key, which is exactly what a client calls verified — a device's o
 signature is printed too, but every device self-signs, so it is not evidence. It
 writes nothing and never opens the crypto store. Element's "this session is not
 verified" needs an identity to check against; `verify` tells you whether there is
-one, and `docs/specs/verify-device.md` records what it would take to give a
-headless bridge one.
+one.
+
+### Give the bridge a cross-signing identity
+
+```bash
+pi-courier verify --bootstrap --dry-run   # generate and self-check the keys, upload nothing
+pi-courier verify --bootstrap             # upload the identity and sign the bridge's own device(s)
+```
+
+This is the write half, and it is what clears the warning: three Ed25519 keys are
+generated locally, the master key signs the self-signing and user-signing keys,
+all three are uploaded (`PUT /keys/device_signing/upload`), and the self-signing
+key then signs the account's own device documents
+(`POST /keys/signatures/upload`). The private keys go to
+`~/.local/state/pi-courier/cross-signing.json` — file 0600, and the command says
+so out loud: back it up, because losing it means losing the identity.
+
+A password is normally not needed: MSC3967 makes the *first* cross-signing upload
+UIA-free, so the command only asks when this homeserver asks — through
+`--password-file <path>` or a hidden terminal prompt, used once and never written
+to a log or a return value. A device signature from the bridge itself is not
+required either: MSC1756 says a master key *may* be signed by a device, and the
+pinned crypto binding exposes no signing call at all.
+
+`--device <id>` signs one device instead of all of the account's devices. The
+command refuses to run when a local bundle already exists (`--force` overrides) or
+when the account already published an identity — resetting an identity is a
+deliberate act, do it in the client you normally verify with. Emoji (SAS)
+verification stays impossible on this crypto layer: no published Node binding
+speaks `m.key.verification.*`. `docs/specs/verify-device.md` records the
+measurements behind all of this.
 
 ### What happens when the bridge dies: systemd vs. watchdog
 

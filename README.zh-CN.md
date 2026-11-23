@@ -661,8 +661,31 @@ pi-courier verify --json    # 同一份报告,机器可读
 cross-signing 身份及其有效期、本地密钥包在不在且权限够不够紧。这里「已签名」指的是
 被本账号的 self-signing key 签过 —— 正是客户端所谓「已验证」;设备自己的签名也会
 显示,但每台设备都自签,所以它不算证据。它不写任何东西,也绝不打开 crypto store。
-Element 那句「此会话未验证」需要一个可比对的身份;`verify` 告诉你有没有,
-`docs/specs/verify-device.md` 记着一个无头桥要拿到它需要什么。
+Element 那句「此会话未验证」需要一个可比对的身份;`verify` 告诉你有没有。
+
+### 给桥一个 cross-signing 身份
+
+```bash
+pi-courier verify --bootstrap --dry-run   # 本地生成并自检密钥,什么都不上传
+pi-courier verify --bootstrap             # 上传身份,并用它签桥自己那台(些)设备
+```
+
+这就是写的那一半,也是让警告消失的那一步:本地生成三把 Ed25519 密钥,master 签
+self-signing 与 user-signing,三份一起上传(`PUT /keys/device_signing/upload`),
+再用 self-signing key 去签本账号自己的设备文档(`POST /keys/signatures/upload`)。
+私钥写到 `~/.local/state/pi-courier/cross-signing.json` —— 文件 0600,命令也会当面
+提醒:请备份,丢了它就是丢了这份身份。
+
+通常不需要密码:MSC3967 规定「首次」上传 cross-signing 密钥不要求 UIA,所以只有
+这个 homeserver 主动要的时候才问 —— 走 `--password-file <路径>` 或终端隐藏输入,
+用一次,绝不写进日志与返回值。也不需要设备亲自签一次:MSC1756 说 master key
+「可以(may)」被设备签,而当前锁定的 crypto 绑定根本没有对外签名入口。
+
+`--device <id>` 只签指定那一台,默认签账号名下所有设备。本地已有密钥包时命令拒绝
+运行(`--force` 可越过),账号已有 cross-signing 身份时也拒绝 —— 重置身份是件需要
+想清楚的事,请在你平时做验证的客户端里做。emoji(SAS)验证在这层 crypto 上仍然
+做不到:没有任何已发布的 Node 绑定会说 `m.key.verification.*`。这背后的实测都记在
+`docs/specs/verify-device.md`。
 
 ### 进程挂了怎么办:systemd 与看门狗
 

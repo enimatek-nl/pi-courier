@@ -13,7 +13,7 @@
  *   pi-courier logs     tail the service logs (optional: <project...> [--level])
  *   pi-courier update   update this project (git pull + npm install + build)
  *   pi-courier doctor   local health check & safe fixes (--fix/--json/--offline)
- *   pi-courier verify   how this account's encryption looks from the outside (--json)
+ *   pi-courier verify   how this account's encryption looks from the outside (--json); --bootstrap gives it a cross-signing identity
  *   pi-courier -v       show the installed version (--version / version)
  *
  * pi itself is managed independently on the system (npm i -g ...); this
@@ -407,6 +407,20 @@ async function cmdVerify(args: string[]): Promise<void> {
   }
   const { fetchKeyReport, keyBundleStatus, statusLines } = await import("./verify/cross-signing.js");
   const bundlePath = path.join(LAYOUT.stateDir, "cross-signing.json");
+  if (args.includes("--bootstrap")) {
+    const { runBootstrap } = await import("./verify/bootstrap-runner.js");
+    process.exitCode = await runBootstrap({
+      fetch,
+      homeserver,
+      accessToken,
+      bundlePath,
+      dryRun: args.includes("--dry-run"),
+      force: args.includes("--force"),
+      deviceFilter: readOptionValue(args, "--device"),
+      passwordFile: readOptionValue(args, "--password-file"),
+    });
+    return;
+  }
   try {
     const report = await fetchKeyReport({ fetch, homeserver, accessToken });
     const bundle = keyBundleStatus(bundlePath);
@@ -419,6 +433,14 @@ async function cmdVerify(args: string[]): Promise<void> {
     console.error(t("verify.status.failed", { message: errorMessage(err) }));
     process.exitCode = 1;
   }
+}
+
+/** `--device X` / `--device=X`; null when the flag is absent. */
+function readOptionValue(args: string[], flag: string): string | null {
+  const index = args.indexOf(flag);
+  if (index >= 0 && index + 1 < args.length) return args[index + 1];
+  const inline = args.find((a) => a.startsWith(`${flag}=`));
+  return inline ? inline.slice(flag.length + 1) : null;
 }
 
 // ===========================================================================
