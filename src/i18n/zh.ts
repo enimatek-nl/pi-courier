@@ -745,6 +745,7 @@ const zh = {
                        pi-courier logs <项目> [项目...] [--level debug|info|warn|error]
   pi-courier disable   卸载服务(停止 + 取消自启 + 删除 unit 文件)
   pi-courier update    更新本项目(git pull + 安装依赖 + 重新构建)
+  pi-courier verify    从外部视角看这个账号的加密状态(--json 机器可读)
   pi-courier doctor    本地体检与健康报告(--fix 修安全项 / --json 机器可读 /
                        --offline 跳过网络检查)
   pi-courier -v        显示版本号(--version / version 亦可)
@@ -752,6 +753,17 @@ const zh = {
 说明:pi 由系统独立安装与升级(npm i -g @earendil-works/pi-coding-agent),
 本项目只更新自身。`,
   "cli.unknownCommand": "\n❌ 未知命令: {cmd}",
+  "verify.status.user": "账号:{userId}",
+  "verify.status.noIdentity": "尚未发布 cross-signing 身份 —— 没有任何东西能把本账号的设备标成已验证。",
+  "verify.status.identityLine": "  身份      {usage}  {keyId}  有效期至 {validUntil}",
+  "verify.status.deviceSigned": "  设备      {deviceId}  签名者:{signers}",
+  "verify.status.deviceUnsigned": "  设备      {deviceId}  未签名 —— 签名者:{signers}",
+  "verify.status.noSigners": "无",
+  "verify.status.bundlePresent": "本地密钥包:{path}(权限 {mode})",
+  "verify.status.bundleWorldReadable": "本地密钥包:{path}(权限 {mode})—— 别人也能读,请收紧",
+  "verify.status.bundleMissing": "本地密钥包:{path} 不存在",
+  "verify.status.noConfig": "❌ 还没有配置 —— 先跑 `pi-courier setup`。",
+  "verify.status.failed": "❌ 读取账号密钥失败:{message}",
   "cli.enable.nodeTooOld": "⚠️  当前 Node 版本为 v{version},pi 的 undici 需要 Node >= 21。建议用 nvm 安装 v24 后重新执行本命令。",
   "cli.enable.unitWritten": "📝 已写入 {path}",
   "cli.enable.failed": "❌ 服务未能启用(unit 文件已写入,但 systemd 操作失败: {steps})。",

@@ -610,6 +610,7 @@ pi-courier start          # start
 pi-courier disable        # uninstall the service
 pi-courier update         # update pi-courier itself
 pi-courier doctor         # local health check & report (--fix safe fixes / --json machine-readable / --offline skip network checks)
+pi-courier verify           # how this account's encryption looks from the outside (--json machine-readable)
 pi-courier -v             # show the installed version
 ```
 
@@ -657,6 +658,24 @@ pi-courier restart
 ```
 
 A pi.dev managed install (`~/.pi/agent`) is supported too: pi-courier resolves the `bin/pi` wrapper script to the current version's real JS entry automatically, so pi upgrades need no config changes (0.3.1+).
+
+### Verify: how this account's encryption looks from outside
+
+```bash
+pi-courier verify           # devices, who signed them, cross-signing identity, local key bundle
+pi-courier verify --json    # the same report machine-readable
+```
+
+One page of read-only facts about the account the bridge logs in as: which
+devices it has and who signed each one, whether the account published a
+cross-signing identity and when those keys expire, and whether a local key bundle
+exists with tight permissions. "Signed" here means signed by the account's
+self-signing key, which is exactly what a client calls verified — a device's own
+signature is printed too, but every device self-signs, so it is not evidence. It
+writes nothing and never opens the crypto store. Element's "this session is not
+verified" needs an identity to check against; `verify` tells you whether there is
+one, and `docs/specs/verify-device.md` records what it would take to give a
+headless bridge one.
 
 ### What happens when the bridge dies: systemd vs. watchdog
 

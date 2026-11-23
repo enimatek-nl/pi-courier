@@ -787,13 +787,25 @@ Usage:
                        pi-courier logs <project> [project...] [--level debug|info|warn|error]
   pi-courier disable   uninstall the service (stop + remove from autostart + delete the unit file)
   pi-courier update    update this project (git pull + install deps + rebuild)
+  pi-courier verify    how this account's encryption looks from the outside (--json machine-readable)
   pi-courier doctor    local health check & report (--fix safe fixes / --json machine-readable /
                        --offline skip network checks)
   pi-courier -v        show the installed version (--version / version also work)
 
 Note: pi itself is installed and upgraded independently on the system
 (npm i -g @earendil-works/pi-coding-agent); this project only ever updates itself.`,
-  "cli.unknownCommand": "\n❌ Unknown command: {cmd}",
+  "cli.unknownCommand": "\n❌ Unknown command: {cmd}",  "verify.status.user": "Account: {userId}",
+  "verify.status.noIdentity": "No cross-signing identity published — nothing can mark this account's devices as verified.",
+  "verify.status.identityLine": "  identity  {usage}  {keyId}  valid until {validUntil}",
+  "verify.status.deviceSigned": "  device    {deviceId}  signed by {signers}",
+  "verify.status.deviceUnsigned": "  device    {deviceId}  unsigned — signers: {signers}",
+  "verify.status.noSigners": "none",
+  "verify.status.bundlePresent": "Local key bundle: {path} (mode {mode})",
+  "verify.status.bundleWorldReadable": "Local key bundle: {path} (mode {mode}) — readable by others, tighten it",
+  "verify.status.bundleMissing": "Local key bundle: none at {path}",
+  "verify.status.noConfig": "❌ Nothing configured yet — run `pi-courier setup` first.",
+  "verify.status.failed": "❌ Could not read the account's keys: {message}",
+
   "cli.enable.nodeTooOld":
     "⚠️  Node is v{version}; pi's undici needs Node >= 21. Install v24 via nvm and re-run this command.",
   "cli.enable.unitWritten": "📝 Wrote {path}",

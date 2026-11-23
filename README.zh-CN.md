@@ -609,6 +609,7 @@ pi-courier start               # 启动
 pi-courier disable             # 卸载服务
 pi-courier update              # 更新 pi-courier 自身
 pi-courier doctor              # 本地体检与健康报告(--fix 修安全项 / --json 机器可读 / --offline 跳过网络检查)
+pi-courier verify              # 从外部视角看这个账号的加密状态(--json 机器可读)
 pi-courier -v                  # 显示当前版本(--version/version 亦可)
 ```
 
@@ -648,6 +649,20 @@ pi-courier restart
 ```
 
 pi.dev 托管安装(`~/.pi/agent`)同样支持:pi-courier 会把 `bin/pi` 包装脚本自动解析到当前版本的真实 JS 入口,pi 升级后无需改配置(0.3.1 起)。
+
+### Verify:别人怎么看这个账号的加密
+
+```bash
+pi-courier verify           # 设备、谁签过它们、cross-signing 身份、本地密钥包
+pi-courier verify --json    # 同一份报告,机器可读
+```
+
+一页只读事实,说的是桥登录的那个账号:有哪些设备、每台的签名者是谁、账号有没有发布
+cross-signing 身份及其有效期、本地密钥包在不在且权限够不够紧。这里「已签名」指的是
+被本账号的 self-signing key 签过 —— 正是客户端所谓「已验证」;设备自己的签名也会
+显示,但每台设备都自签,所以它不算证据。它不写任何东西,也绝不打开 crypto store。
+Element 那句「此会话未验证」需要一个可比对的身份;`verify` 告诉你有没有,
+`docs/specs/verify-device.md` 记着一个无头桥要拿到它需要什么。
 
 ### 进程挂了怎么办:systemd 与看门狗
 

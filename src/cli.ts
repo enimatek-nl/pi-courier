@@ -13,6 +13,7 @@
  *   pi-courier logs     tail the service logs (optional: <project...> [--level])
  *   pi-courier update   update this project (git pull + npm install + build)
  *   pi-courier doctor   local health check & safe fixes (--fix/--json/--offline)
+ *   pi-courier verify   how this account's encryption looks from the outside (--json)
  *   pi-courier -v       show the installed version (--version / version)
  *
  * pi itself is managed independently on the system (npm i -g ...); this
@@ -381,6 +382,46 @@ async function cmdDoctor(args: string[]): Promise<void> {
 }
 
 // ===========================================================================
+// verify
+// ===========================================================================
+
+/**
+ * `pi-courier verify` —— 把「别人到底怎么看这台设备的加密」摊成一页:whoami
+ * 认账号,keys/query 认设备与跨签名身份,再看本地密钥包在不在、权限紧不紧
+ * (spec:verify-device.md)。
+ *
+ * 只读:不签任何东西,也不碰桥的 crypto store —— 那扇门由 Rust 绑定独占,
+ * 0.4 的 schema 新绑定又读不了。签名/上传的另一半在 spec 里记着实测边界。
+ */
+async function cmdVerify(args: string[]): Promise<void> {
+  // 代理接线与 setup/doctor 同源:这一步要出网。
+  const { applyProxySettings } = await import("./proxy.js");
+  applyProxySettings(loadConfig());
+  const config = loadConfig();
+  const homeserver = config.matrix?.homeserverUrl?.replace(/\/+$/, "");
+  const accessToken = config.matrix?.accessToken;
+  if (!homeserver || !accessToken) {
+    console.error(t("verify.status.noConfig"));
+    process.exitCode = 1;
+    return;
+  }
+  const { fetchKeyReport, keyBundleStatus, statusLines } = await import("./verify/cross-signing.js");
+  const bundlePath = path.join(LAYOUT.stateDir, "cross-signing.json");
+  try {
+    const report = await fetchKeyReport({ fetch, homeserver, accessToken });
+    const bundle = keyBundleStatus(bundlePath);
+    if (args.includes("--json")) {
+      console.log(JSON.stringify({ ...report, bundle }, null, 2));
+      return;
+    }
+    for (const line of statusLines(report, bundle)) console.log(line);
+  } catch (err) {
+    console.error(t("verify.status.failed", { message: errorMessage(err) }));
+    process.exitCode = 1;
+  }
+}
+
+// ===========================================================================
 // update
 // ===========================================================================
 
@@ -549,6 +590,9 @@ async function main(): Promise<void> {
       break;
     case "doctor":
       await cmdDoctor(rest);
+      break;
+    case "verify":
+      await cmdVerify(rest);
       break;
     case "update":
       await cmdUpdate();
