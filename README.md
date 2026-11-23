@@ -611,6 +611,8 @@ pi-courier disable        # uninstall the service
 pi-courier update         # update pi-courier itself
 pi-courier doctor         # local health check & report (--fix safe fixes / --json machine-readable / --offline skip network checks)
 pi-courier verify           # how this account's encryption looks from the outside (--json machine-readable)
+pi-courier verify --bootstrap  # create the account's cross-signing identity and sign its own device(s)
+pi-courier verify --sign [device]  # sign devices still missing that signature, with the stored key
 pi-courier -v             # show the installed version
 ```
 

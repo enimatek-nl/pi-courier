@@ -610,6 +610,8 @@ pi-courier disable             # 卸载服务
 pi-courier update              # 更新 pi-courier 自身
 pi-courier doctor              # 本地体检与健康报告(--fix 修安全项 / --json 机器可读 / --offline 跳过网络检查)
 pi-courier verify              # 从外部视角看这个账号的加密状态(--json 机器可读)
+pi-courier verify --bootstrap  # 给账号生成 cross-signing 身份并签自己那台(些)设备
+pi-courier verify --sign [设备]  # 用包里的私钥给还缺签名的设备补签
 pi-courier -v                  # 显示当前版本(--version/version 亦可)
 ```
 
