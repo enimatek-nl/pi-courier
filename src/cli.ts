@@ -13,7 +13,7 @@
  *   pi-courier logs     tail the service logs (optional: <project...> [--level])
  *   pi-courier update   update this project (git pull + npm install + build)
  *   pi-courier doctor   local health check & safe fixes (--fix/--json/--offline)
- *   pi-courier verify   how this account's encryption looks from the outside (--json); --bootstrap gives it a cross-signing identity
+ *   pi-courier verify   encryption view (--json); --bootstrap creates a cross-signing identity, --sign signs devices with it
  *   pi-courier -v       show the installed version (--version / version)
  *
  * pi itself is managed independently on the system (npm i -g ...); this
@@ -33,6 +33,7 @@ import { fileURLToPath } from "node:url";
 import { effectiveLanguage, loadConfig, runtimeLayout } from "./config.js";
 import { errorMessage } from "./errors.js";
 import { setLocale, t } from "./i18n/index.js";
+import { positionalAfterSign, unknownVerifyFlags } from "./verify/cli-flags.js";
 import { buildLegacyMigrationPlan, runLegacyMigration } from "./legacy-migration.js";
 import { buildLogFilterArgs } from "./log-filter.js";
 import { nativeBindingExists } from "./npm-runtime.js";
@@ -405,8 +406,19 @@ async function cmdVerify(args: string[]): Promise<void> {
     process.exitCode = 1;
     return;
   }
+  const unknown = unknownVerifyFlags(args);
+  if (unknown) {
+    console.error(t("verify.usage.badFlag", { flag: unknown }));
+    process.exitCode = 2;
+    return;
+  }
   const { fetchKeyReport, keyBundleStatus, statusLines } = await import("./verify/cross-signing.js");
   const bundlePath = path.join(LAYOUT.stateDir, "cross-signing.json");
+  if (args.includes("--sign")) {
+    const { runSignDevices } = await import("./verify/bootstrap-runner.js");
+    process.exitCode = await runSignDevices({ fetch, homeserver, accessToken, bundlePath, deviceIds: positionalAfterSign(args) });
+    return;
+  }
   if (args.includes("--bootstrap")) {
     const { runBootstrap } = await import("./verify/bootstrap-runner.js");
     process.exitCode = await runBootstrap({

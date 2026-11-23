@@ -828,6 +828,12 @@ Note: pi itself is installed and upgraded independently on the system
   "verify.bootstrap.noDevices": "❌ this account publishes no devices, so there is nothing to sign — log the bridge in first (it creates its device keys on start).\n",
   "verify.bootstrap.noSuchDevice": "❌ no device {deviceId} on this account. Known: {known}.\n",
   "verify.bootstrap.passwordFileUnreadable": "❌ cannot read {path} — pass a file you can read (and keep it 0600).",
+  "verify.usage.badFlag": "❌ unknown option {flag} for `pi-courier verify`. Known: --json, --bootstrap, --dry-run, --force, --sign [device…], --device <id>, --password-file <path>.",
+  "verify.sign.usage": "\nSigning devices with the self-signing key from {path}.\n",
+  "verify.sign.alreadySigned": "  device {deviceId} already signed — nothing to do\n",
+  "verify.sign.summary": "\n{signed} signed, {already} already were, {failed} failed.\n",
+  "verify.sign.noBundle": "❌ no key bundle at {path} — run `pi-courier verify --bootstrap` once to create the identity.\n",
+  "verify.sign.bundleIncomplete": "❌ {path} holds no usable self-signing key, so nothing can be signed with it.\n",
 
   "cli.enable.nodeTooOld":
     "⚠️  Node is v{version}; pi's undici needs Node >= 21. Install v24 via nvm and re-run this command.",

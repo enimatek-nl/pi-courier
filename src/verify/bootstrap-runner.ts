@@ -10,6 +10,7 @@
 import * as fs from "node:fs";
 import { t } from "../i18n/index.js";
 import { fetchKeyReport } from "./cross-signing.js";
+import { readKeyBundle } from "./cross-signing.js";
 import {
   assertNoKeyIdCollision,
   buildIdentity,
@@ -19,6 +20,7 @@ import {
   saveKeyBundle,
   signDeviceDoc,
   uploadDeviceSignature,
+  type JsonSigner,
   uploadIdentity,
 } from "./bootstrap.js";
 
@@ -198,3 +200,77 @@ async function askHiddenLine(prompt: string): Promise<string | null> {
   });
 }
 
+
+// ---------- --sign:用已有的身份再签设备 ----------
+
+export interface SignOptions {
+  fetch: typeof fetch;
+  homeserver: string;
+  accessToken: string;
+  bundlePath: string;
+  /** 要签的设备 id;空数组 = 账号名下所有设备。 */
+  deviceIds: string[];
+  log?: (line: string) => void;
+  warn?: (line: string) => void;
+}
+
+/**
+ * 用磁盘上密钥包里的 self-signing key 再签(几台)设备 —— bootstrap 之后来了
+ * 新设备就走这条路,绝不另起一份身份。
+ */
+export async function runSignDevices(options: SignOptions): Promise<number> {
+  const log = options.log ?? ((line: string) => console.log(line));
+  const warn = options.warn ?? ((line: string) => console.error(line));
+
+  const raw = readKeyBundle(options.bundlePath);
+  if (!raw) {
+    warn(t("verify.sign.noBundle", { path: options.bundlePath }));
+    return 1;
+  }
+  const userId = typeof raw.userId === "string" ? raw.userId : "";
+  const stored = raw.selfSigning as { keyId?: string; publicKey?: string; privateKey?: string } | undefined;
+  if (!userId || !stored?.privateKey || !stored.publicKey || !stored.keyId) {
+    warn(t("verify.sign.bundleIncomplete", { path: options.bundlePath }));
+    return 1;
+  }
+  const signer: JsonSigner = { userId, keyId: stored.keyId, publicKey: stored.publicKey, privateKey: stored.privateKey };
+
+  const devices = await fetchOwnDevices({ fetch: options.fetch, homeserver: options.homeserver, accessToken: options.accessToken, userId });
+  // 有的服务端把身份密钥也混在同一个映射里:只认带 device_id 的那些。
+  const known = Object.keys(devices).filter((id) => typeof devices[id].device_id === "string").sort();
+  const targets = options.deviceIds.length > 0 ? options.deviceIds : known;
+  const missing = targets.filter((id) => !known.includes(id));
+  for (const id of missing) warn(t("verify.bootstrap.noSuchDevice", { deviceId: id, known: known.join(", ") || "-" }));
+  if (missing.length === targets.length) return 1;
+
+  log(t("verify.sign.usage", { path: options.bundlePath }));
+  let signed = 0;
+  let already = 0;
+  let failed = 0;
+  for (const deviceId of targets.filter((id) => known.includes(id))) {
+    const doc = devices[deviceId];
+    const existing = ((doc.signatures ?? {}) as Record<string, Record<string, string>>)[userId]?.[signer.keyId];
+    if (existing) {
+      already += 1;
+      log(t("verify.sign.alreadySigned", { deviceId }));
+      continue;
+    }
+    const result = await uploadDeviceSignature({
+      fetch: options.fetch,
+      homeserver: options.homeserver,
+      accessToken: options.accessToken,
+      userId,
+      deviceId,
+      signedDoc: signDeviceDoc(doc, signer, userId),
+    });
+    if (result.ok) {
+      signed += 1;
+      log(t("verify.bootstrap.deviceSigned", { deviceId }));
+    } else {
+      failed += 1;
+      warn(t("verify.bootstrap.signatureRejected", { deviceId, error: result.error ?? t("verify.httpError", { status: String(result.status) }) }));
+    }
+  }
+  log(t("verify.sign.summary", { signed: String(signed), already: String(already), failed: String(failed) }));
+  return failed > 0 ? 1 : 0;
+}

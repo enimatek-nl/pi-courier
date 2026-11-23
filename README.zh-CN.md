@@ -682,6 +682,14 @@ self-signing 与 user-signing,三份一起上传(`POST /keys/device_signing/uplo
 用一次,绝不写进日志与返回值。也不需要设备亲自签一次:MSC1756 说 master key
 「可以(may)」被设备签,而当前锁定的 crypto 绑定根本没有对外签名入口。
 
+```bash
+pi-courier verify --sign                 # 给所有还没签上的设备补签名
+pi-courier verify --sign ABCDEFG1        # …或只签这一台
+```
+
+来了新设备(state 目录被清、换了 `XDG_STATE_HOME`)就用密钥包里那把 self-signing
+key 去签,绝不另起一份身份:`--sign` 只读包里的私钥、补上缺的签名,签过的不碰。
+
 `--device <id>` 只签指定那一台,默认签账号名下所有设备。本地已有密钥包时命令拒绝
 运行(`--force` 可越过),账号已有 cross-signing 身份时也拒绝 —— 重置身份是件需要
 想清楚的事,请在你平时做验证的客户端里做。emoji(SAS)验证在这层 crypto 上仍然

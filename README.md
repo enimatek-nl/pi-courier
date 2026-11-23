@@ -698,6 +698,15 @@ to a log or a return value. A device signature from the bridge itself is not
 required either: MSC1756 says a master key *may* be signed by a device, and the
 pinned crypto binding exposes no signing call at all.
 
+```bash
+pi-courier verify --sign                 # sign every device still missing the signature
+pi-courier verify --sign ABCDEFG1        # …or just this one
+```
+
+A new device — after a wiped state dir, a different `XDG_STATE_HOME` — is signed
+with the key from that bundle, never by a fresh identity: `--sign` loads the stored
+self-signing key, pushes the missing signatures and leaves the rest alone.
+
 `--device <id>` signs one device instead of all of the account's devices. The
 command refuses to run when a local bundle already exists (`--force` overrides) or
 when the account already published an identity — resetting an identity is a

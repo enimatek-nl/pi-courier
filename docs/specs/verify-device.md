@@ -88,6 +88,17 @@ orphan the identity it describes), the account already published an identity
 verify with), the requested `--device` is not on the account, or an uploaded
 public key collides with a device id (the server would answer `M_FORBIDDEN`).
 
+`pi-courier verify --sign [device…]` is the second half of the same idea: it loads
+the self-signing key from the bundle and signs devices that do not carry its
+signature yet — the path a bridge takes when it registers a new device id after a
+state loss. It never generates keys, so it cannot reset an identity by accident;
+devices that already carry the signature are reported and left alone, and the exit
+code is non-zero only when a push failed.
+
+Unknown options are an error (`--sig` exits 2 and lists what `verify` takes). That
+rule came from the field: `verify --sign` before `--sign` existed printed the
+ordinary report, which reads exactly like a signature was made.
+
 A password is asked for only when the server asked for UIA. Then it comes from
 `--password-file` or from a hidden terminal prompt, is used in exactly one
 request body, and appears in no log line, no return value and no test output.

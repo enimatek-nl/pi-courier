@@ -25,7 +25,9 @@ import {
   uploadIdentity,
   type JsonSigner,
 } from "../src/verify/bootstrap.js";
-import { runBootstrap } from "../src/verify/bootstrap-runner.js";
+import { runBootstrap, runSignDevices } from "../src/verify/bootstrap-runner.js";
+import { unknownVerifyFlags, positionalAfterSign } from "../src/verify/cli-flags.js";
+import { verifyEd25519 } from "../src/verify/cross-signing.js";
 
 setLocale("en");
 
@@ -68,7 +70,7 @@ interface Call {
  * 假服务端:记录每次调用,按 url 尾巴决定回什么。`uiaa` 让写请求先要一次
  * user-interactive auth,`rejectSignatures` 让签名上传被拒。
  */
-function makeFetch(scenario: { uiaa?: boolean; signatureStatus?: number; deviceIds?: string[]; withIdentity?: boolean; signingStatusByMethod?: Record<string, number> } = {}) {
+function makeFetch(scenario: { uiaa?: boolean; signatureStatus?: number; deviceIds?: string[]; withIdentity?: boolean; signingStatusByMethod?: Record<string, number>; signDevicesWith?: string } = {}) {
   const calls: Call[] = [];
   const fetchStub = (async (url: string, init?: RequestInit) => {
     const body = typeof init?.body === "string" ? (JSON.parse(init.body) as Record<string, unknown>) : undefined;
@@ -77,7 +79,16 @@ function makeFetch(scenario: { uiaa?: boolean; signatureStatus?: number; deviceI
       ({ ok: status >= 200 && status < 300, status, json: async () => payload }) as unknown as Response;
 
     if (String(url).endsWith("/account/whoami")) return respond(200, { user_id: USER });
-    if (String(url).endsWith("/keys/query")) return respond(200, keyQueryBody(scenario.deviceIds ?? ["PICOURIERDEVAAAAAA"], scenario.withIdentity));
+    if (String(url).endsWith("/keys/query")) {
+      const body2 = keyQueryBody(scenario.deviceIds ?? ["PICOURIERDEVAAAAAA"], scenario.withIdentity) as { device_keys: Record<string, Record<string, Record<string, unknown>>> };
+      if (scenario.signDevicesWith) {
+        for (const doc of Object.values(body2.device_keys[USER])) {
+          const signatures = doc.signatures as Record<string, Record<string, string>>;
+          signatures[USER][scenario.signDevicesWith] = "already";
+        }
+      }
+      return respond(200, body2);
+    }
     if (String(url).endsWith("/keys/device_signing/upload")) {
       const forced = scenario.signingStatusByMethod?.[(init?.method ?? "GET").toUpperCase()];
       if (forced && forced >= 300) {
@@ -370,5 +381,72 @@ describe("runBootstrap", () => {
     expect(await runBootstrap(options)).toBe(1);
     expect(warns.join("\n")).toContain("signature does not verify");
     expect(fs.existsSync(options.bundlePath)).toBe(true);
+  });
+});
+
+describe("runSignDevices", () => {
+  /** 密钥包写在临时目录里,签的时候应从盘上用,而不是再生一把。 */
+  function bundleOnDisk(): { path: string; publicKey: string; keyId: string } {
+    const bundle = identityBundle();
+    const file = tmpBundle();
+    saveKeyBundle(file, bundle);
+    return { path: file, publicKey: bundle.selfSigning.signer.publicKey, keyId: bundle.selfSigning.signer.keyId };
+  }
+
+  it("签掉没签的设备,而且用的就是盘上那把 self-signing key", async () => {
+    const onDisk = bundleOnDisk();
+    const { fetchStub, calls } = makeFetch();
+    const { options, logs } = runOptions({ fetch: fetchStub, bundlePath: onDisk.path });
+    const code = await runSignDevices({ fetch: fetchStub, homeserver: HS, accessToken: TOKEN, bundlePath: onDisk.path, deviceIds: [], log: (line) => logs.push(line) });
+    expect(code).toBe(0);
+    void options;
+    const pushed = calls.filter((call) => String(call.url).endsWith("signatures/upload"));
+    expect(pushed).toHaveLength(1);
+    const body = pushed[0].body as Record<string, Record<string, Record<string, Record<string, string>>>>;
+    const doc = body[USER].PICOURIERDEVAAAAAA;
+    const signature = doc.signatures[USER][onDisk.keyId];
+    expect(signature).toBeTruthy();
+    expect(verifyEd25519(onDisk.publicKey, doc as unknown as Record<string, unknown>, signature)).toBe(true);
+  });
+
+  it("已经签过的设备不再推一次", async () => {
+    const onDisk = bundleOnDisk();
+    const { fetchStub, calls } = makeFetch({ signDevicesWith: onDisk.keyId });
+    const code = await runSignDevices({ fetch: fetchStub, homeserver: HS, accessToken: TOKEN, bundlePath: onDisk.path, deviceIds: [] });
+    expect(code).toBe(0);
+    expect(calls.filter((call) => String(call.url).endsWith("signatures/upload"))).toHaveLength(0);
+  });
+
+  it("没有密钥包时停下,并指向 bootstrap", async () => {
+    const { fetchStub, calls } = makeFetch();
+    const warns: string[] = [];
+    const code = await runSignDevices({ fetch: fetchStub, homeserver: HS, accessToken: TOKEN, bundlePath: tmpBundle(), deviceIds: [], warn: (line) => warns.push(line) });
+    expect(code).toBe(1);
+    expect(warns.join("\n")).toContain("--bootstrap");
+    expect(calls.filter((call) => String(call.url).endsWith("signatures/upload"))).toHaveLength(0);
+  });
+
+  it("指定不存在的设备就不动手", async () => {
+    const onDisk = bundleOnDisk();
+    const { fetchStub, calls } = makeFetch();
+    const warns: string[] = [];
+    const code = await runSignDevices({ fetch: fetchStub, homeserver: HS, accessToken: TOKEN, bundlePath: onDisk.path, deviceIds: ["NOPE"], warn: (line) => warns.push(line) });
+    expect(code).toBe(1);
+    expect(warns.join("\n")).toContain("NOPE");
+    expect(calls.filter((call) => String(call.url).endsWith("signatures/upload"))).toHaveLength(0);
+  });
+});
+
+describe("verify 的参数判定", () => {
+  it("不认识的选项要报出来", () => {
+    expect(unknownVerifyFlags(["--json"])).toBeNull();
+    expect(unknownVerifyFlags(["--bootstrap", "--dry-run", "--device", "X", "--password-file=/p"])).toBeNull();
+    expect(unknownVerifyFlags(["--sig"])).toBe("--sig");
+  });
+
+  it("--sign 后面的设备 id 收走,后面的选项留下", () => {
+    expect(positionalAfterSign(["--sign"])).toEqual([]);
+    expect(positionalAfterSign(["--sign", "ABCD", "EFGH", "--json"])).toEqual(["ABCD", "EFGH"]);
+    expect(positionalAfterSign(["--json"])).toEqual([]);
   });
 });
