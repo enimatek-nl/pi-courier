@@ -98,9 +98,9 @@ export function verifyEd25519(publicKeyBase64: string, doc: Record<string, unkno
 
 /** 三把 cross-signing 密钥的名字与上传文档里的字段名,顺序即 MSK → SSK → USK。 */
 export const SIGNING_KEY_NAMES = [
-  { name: "m.cross_signing.master", usage: "master", field: "master_key" },
-  { name: "m.cross_signing.self_signing", usage: "self_signing", field: "self_signing_key" },
-  { name: "m.cross_signing.user_signing", usage: "user_signing", field: "user_signing_key" },
+  { name: "m.cross_signing.master", usage: "master", field: "master_key", queryField: "master_keys" },
+  { name: "m.cross_signing.self_signing", usage: "self_signing", field: "self_signing_key", queryField: "self_signing_keys" },
+  { name: "m.cross_signing.user_signing", usage: "user_signing", field: "user_signing_key", queryField: "user_signing_keys" },
 ] as const;
 
 /**
@@ -113,7 +113,11 @@ export function describeKey(userId: string, id: string, raw: Record<string, unkn
   const ed25519KeyId = Object.keys(keys).find((key) => key.startsWith("ed25519:")) ?? "";
   const signatures = (raw["signatures"] ?? {}) as Record<string, Record<string, unknown>>;
   const usage = Array.isArray(raw["usage"]) ? (raw["usage"] as unknown[]).map(String) : undefined;
-  const validUntil = typeof raw["valid_until"] === "number" ? (raw["valid_until"] as number) * 1000 : undefined;
+  // `valid_until` 是 ISO 字符串(spec 与 Synapse 都如此);早先只认数字时间戳,
+  // 于是有效期全显示成「?」。两种形状都收,认不出来就干脆不显示。
+  const rawUntil = raw["valid_until"];
+  const parsed = typeof rawUntil === "number" ? rawUntil * 1000 : typeof rawUntil === "string" ? Date.parse(rawUntil) : Number.NaN;
+  const validUntil = Number.isFinite(parsed) ? parsed : undefined;
   const signedWith: Record<string, string[]> = {};
   for (const [signer, block] of Object.entries(signatures)) {
     signedWith[signer] = Object.keys(block ?? {}).sort();
@@ -138,7 +142,18 @@ export function readKeyQuery(userId: string, body: Record<string, unknown>): Key
   const users = body["device_keys"] as Record<string, Record<string, Record<string, unknown>>> | undefined;
   const group: Record<string, Record<string, unknown>> = users?.[userId] ?? {};
   const entries = Object.entries(group).filter(([, value]) => value && typeof value === "object");
-  const identity = entries.filter(([, value]) => Array.isArray(value["usage"]));
+  // 身份密钥住在响应的顶层(`master_keys` / `self_signing_keys` /
+  // `user_signing_keys`,以 user id 为键)—— 2026-11-23 在 Synapse 上实测。
+  // 只读 device_keys 会把「有身份」报成「没有身份」,而这条线正是整个命令的
+  // 结论,所以两种形状都收:顶层为准,mixed-in 的旧形状也认。
+  const topLevel: [string, Record<string, unknown>][] = [];
+  for (const spec of SIGNING_KEY_NAMES) {
+    const map = body[spec.queryField] as Record<string, Record<string, unknown>> | undefined;
+    const doc = map?.[userId];
+    if (doc && typeof doc === "object") topLevel.push([`${spec.usage}`, doc]);
+  }
+  const mixed = entries.filter(([, value]) => Array.isArray(value["usage"]) && !topLevel.some(([, doc]) => doc === value));
+  const identity = [...topLevel, ...mixed];
   const ssk = identity.find(([, value]) => (value["usage"] as unknown[]).includes("self_signing"));
   const selfSigningKeyId = ssk ? Object.keys((ssk[1]["keys"] ?? {}) as Record<string, string>)[0] ?? null : null;
   return {

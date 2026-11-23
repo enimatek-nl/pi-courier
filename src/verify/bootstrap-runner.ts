@@ -115,7 +115,7 @@ export async function runBootstrap(options: BootstrapOptions): Promise<number> {
     warn(`❌ ${uploaded.error ?? t("verify.httpError", { status: String(uploaded.status) })}`);
     return 1;
   }
-  log(t("verify.bootstrap.identityUploaded"));
+  log(t("verify.bootstrap.identityUploaded", { method: uploaded.method ?? "POST" }));
 
   let signed = 0;
   for (const deviceId of deviceIds) {

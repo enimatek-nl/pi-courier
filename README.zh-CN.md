@@ -671,7 +671,8 @@ pi-courier verify --bootstrap             # 上传身份,并用它签桥自己�
 ```
 
 这就是写的那一半,也是让警告消失的那一步:本地生成三把 Ed25519 密钥,master 签
-self-signing 与 user-signing,三份一起上传(`PUT /keys/device_signing/upload`),
+self-signing 与 user-signing,三份一起上传(`POST /keys/device_signing/upload`,服务端只认 PUT
+就用 PUT),
 再用 self-signing key 去签本账号自己的设备文档(`POST /keys/signatures/upload`)。
 私钥写到 `~/.local/state/pi-courier/cross-signing.json` —— 文件 0600,命令也会当面
 提醒:请备份,丢了它就是丢了这份身份。

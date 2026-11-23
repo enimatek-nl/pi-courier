@@ -685,7 +685,7 @@ pi-courier verify --bootstrap             # upload the identity and sign the bri
 
 This is the write half, and it is what clears the warning: three Ed25519 keys are
 generated locally, the master key signs the self-signing and user-signing keys,
-all three are uploaded (`PUT /keys/device_signing/upload`), and the self-signing
+all three are uploaded (`POST /keys/device_signing/upload`, falling back to PUT), and the self-signing
 key then signs the account's own device documents
 (`POST /keys/signatures/upload`). The private keys go to
 `~/.local/state/pi-courier/cross-signing.json` — file 0600, and the command says

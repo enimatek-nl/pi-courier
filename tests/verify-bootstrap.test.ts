@@ -68,7 +68,7 @@ interface Call {
  * 假服务端:记录每次调用,按 url 尾巴决定回什么。`uiaa` 让写请求先要一次
  * user-interactive auth,`rejectSignatures` 让签名上传被拒。
  */
-function makeFetch(scenario: { uiaa?: boolean; signatureStatus?: number; deviceIds?: string[]; withIdentity?: boolean } = {}) {
+function makeFetch(scenario: { uiaa?: boolean; signatureStatus?: number; deviceIds?: string[]; withIdentity?: boolean; signingStatusByMethod?: Record<string, number> } = {}) {
   const calls: Call[] = [];
   const fetchStub = (async (url: string, init?: RequestInit) => {
     const body = typeof init?.body === "string" ? (JSON.parse(init.body) as Record<string, unknown>) : undefined;
@@ -79,6 +79,10 @@ function makeFetch(scenario: { uiaa?: boolean; signatureStatus?: number; deviceI
     if (String(url).endsWith("/account/whoami")) return respond(200, { user_id: USER });
     if (String(url).endsWith("/keys/query")) return respond(200, keyQueryBody(scenario.deviceIds ?? ["PICOURIERDEVAAAAAA"], scenario.withIdentity));
     if (String(url).endsWith("/keys/device_signing/upload")) {
+      const forced = scenario.signingStatusByMethod?.[(init?.method ?? "GET").toUpperCase()];
+      if (forced && forced >= 300) {
+        return respond(forced, { errcode: "M_UNRECOGNIZED", error: "Unrecognized request" });
+      }
       if (scenario.uiaa && !body?.auth) {
         return respond(401, { errcode: "M_UNAUTHORIZED", session: "session-1", flows: [{ stages: ["m.login.password"] }] });
       }
@@ -187,12 +191,13 @@ describe("buildIdentity / 落盘", () => {
 });
 
 describe("uploadIdentity", () => {
-  it("首次上传不要 UIA:一次 PUT,三份文档都带上", async () => {
+  it("首次上传不要 UIA:一次 POST,三份文档都带上", async () => {
     const { fetchStub, calls } = makeFetch();
     const outcome = await uploadIdentity({ fetch: fetchStub, homeserver: HS, accessToken: TOKEN, bundle: identityBundle() });
     expect(outcome.ok).toBe(true);
+    expect(outcome.method).toBe("POST");
     expect(calls).toHaveLength(1);
-    expect(calls[0].method).toBe("PUT");
+    expect(calls[0].method).toBe("POST");
     expect(Object.keys(calls[0].body ?? {}).sort()).toEqual(["master_key", "self_signing_key", "user_signing_key"]);
     expect(JSON.stringify(outcome)).not.toContain("privateKey");
   });
@@ -216,6 +221,27 @@ describe("uploadIdentity", () => {
     expect(outcome.ok).toBe(false);
     expect(outcome.uiaaTypes).toEqual(["m.login.password"]);
     expect(calls).toHaveLength(1);
+  });
+
+  it("这个 Synapse 只认 POST:PUT 405 就换过去,别的方法不试", async () => {
+    const onlyPost = makeFetch();
+    const postFirst = await uploadIdentity({ fetch: onlyPost.fetchStub, homeserver: HS, accessToken: TOKEN, bundle: identityBundle() });
+    expect(postFirst.method).toBe("POST");
+
+    // 先试的动词被服务端否认时,第二个要顶上
+    const { fetchStub, calls } = makeFetch({ signingStatusByMethod: { POST: 405 } });
+    const outcome = await uploadIdentity({ fetch: fetchStub, homeserver: HS, accessToken: TOKEN, bundle: identityBundle() });
+    expect(outcome.ok).toBe(true);
+    expect(outcome.method).toBe("PUT");
+    expect(calls.map((call) => call.method)).toEqual(["POST", "PUT"]);
+  });
+
+  it("两个动词都不认时把最后一次失败交回去,不再乱试", async () => {
+    const { fetchStub, calls } = makeFetch({ signingStatusByMethod: { POST: 405, PUT: 404 } });
+    const outcome = await uploadIdentity({ fetch: fetchStub, homeserver: HS, accessToken: TOKEN, bundle: identityBundle() });
+    expect(outcome.ok).toBe(false);
+    expect(outcome.error).toContain("Unrecognized");
+    expect(calls.map((call) => call.method)).toEqual(["POST", "PUT"]);
   });
 });
 
@@ -261,7 +287,7 @@ describe("runBootstrap", () => {
     const { options, logs } = runOptions({ fetch: fetchStub });
     const code = await runBootstrap({ ...options, dryRun: true });
     expect(code).toBe(0);
-    expect(calls.some((call) => call.method === "PUT" || String(call.url).includes("signatures/upload"))).toBe(false);
+    expect(calls.some((call) => String(call.url).includes("device_signing/upload") || String(call.url).includes("signatures/upload"))).toBe(false);
     expect(fs.existsSync(options.bundlePath)).toBe(false);
     expect(logs.join("\n")).toContain("master_key");
   });
@@ -271,7 +297,7 @@ describe("runBootstrap", () => {
     const { options, logs } = runOptions({ fetch: fetchStub });
     const code = await runBootstrap(options);
     expect(code).toBe(0);
-    expect(calls.some((call) => call.method === "PUT" && String(call.url).endsWith("device_signing/upload"))).toBe(true);
+    expect(calls.some((call) => call.method === "POST" && String(call.url).endsWith("device_signing/upload"))).toBe(true);
     const signed = calls.filter((call) => String(call.url).endsWith("signatures/upload"));
     expect(signed).toHaveLength(1);
     expect(fs.existsSync(options.bundlePath)).toBe(true);
@@ -287,7 +313,7 @@ describe("runBootstrap", () => {
     const second = makeFetch();
     const b = runOptions({ fetch: second.fetchStub, bundlePath: a.options.bundlePath });
     expect(await runBootstrap(b.options)).toBe(1);
-    expect(second.calls.some((call) => call.method === "PUT")).toBe(false);
+    expect(second.calls.some((call) => String(call.url).includes("device_signing/upload"))).toBe(false);
 
     const c = runOptions({ fetch: second.fetchStub, bundlePath: a.options.bundlePath, force: true });
     expect(await runBootstrap(c.options)).toBe(0);
@@ -297,7 +323,7 @@ describe("runBootstrap", () => {
     const { fetchStub, calls } = makeFetch({ withIdentity: true });
     const { options, warns } = runOptions({ fetch: fetchStub });
     expect(await runBootstrap(options)).toBe(1);
-    expect(calls.some((call) => call.method === "PUT")).toBe(false);
+    expect(calls.some((call) => String(call.url).includes("device_signing/upload"))).toBe(false);
     expect(warns.join("\n")).toContain("already has a cross-signing identity");
   });
 
@@ -307,7 +333,8 @@ describe("runBootstrap", () => {
     expect(await runBootstrap(options)).toBe(1);
     expect(warns.join("\n")).toContain("m.login.password");
     expect(fs.existsSync(options.bundlePath)).toBe(false);
-    expect(calls.filter((call) => call.method === "PUT")).toHaveLength(1);
+    // 一次 POST 撞上 401,没有密码就不再试第二次
+    expect(calls.filter((call) => String(call.url).includes("device_signing/upload"))).toHaveLength(1);
   });
 
   it("密码文件能用,而且密码不落进任何输出", async () => {
@@ -324,7 +351,7 @@ describe("runBootstrap", () => {
     const { fetchStub, calls } = makeFetch({ uiaa: true });
     const { options, warns } = runOptions({ fetch: fetchStub, askSecret: async () => null });
     expect(await runBootstrap(options)).toBe(1);
-    expect(calls.filter((call) => call.method === "PUT")).toHaveLength(1); // 只有那次 401
+    expect(calls.filter((call) => String(call.url).includes("device_signing/upload"))).toHaveLength(1); // 只有那次 401
     expect(warns.join("\n")).toContain("Cancelled");
     expect(fs.existsSync(options.bundlePath)).toBe(false);
   });
@@ -334,7 +361,7 @@ describe("runBootstrap", () => {
     const { options, warns } = runOptions({ fetch: fetchStub, deviceFilter: "NOPE" });
     expect(await runBootstrap(options)).toBe(1);
     expect(warns.join("\n")).toContain("NOPE");
-    expect(calls.some((call) => call.method === "PUT")).toBe(false);
+    expect(calls.some((call) => String(call.url).includes("device_signing/upload"))).toBe(false);
   });
 
   it("身份传上去但设备签名被拒:算失败,密钥包仍留下(身份已经生效)", async () => {

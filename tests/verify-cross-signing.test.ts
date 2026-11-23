@@ -8,6 +8,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { describe, expect, it } from "vitest";
+import { setLocale } from "../src/i18n/index.js";
 import {
   base64Unpadded,
   canonicalJson,
@@ -22,6 +23,8 @@ import {
   withoutSignatures,
   writeKeyBundle,
 } from "../src/verify/cross-signing.js";
+
+setLocale("en");
 
 const USER = "@pico:example.org";
 
@@ -200,5 +203,58 @@ describe("fetchKeyReport", () => {
   it("surfaces a server error as an error", async () => {
     const fakeFetch = (async () => ({ ok: false, status: 401, json: async () => ({}) })) as unknown as typeof fetch;
     await expect(fetchKeyReport({ fetch: fakeFetch, homeserver: "https://hs.example.org", accessToken: "nope" })).rejects.toThrow(/401/);
+  });
+});
+
+/**
+ * Synapse 实际回的形状(2026-11-23 实测):身份在响应**顶层**的三个复数键里,
+ * 以 user id 为键;device_keys 里只有普通设备。只翻 device_keys 的读法会把
+ * 「有身份」报成「没有身份」—— 这条测试就是钉住它的。
+ */
+describe("readKeyQuery accepts the top-level identity Synapse actually returns", () => {
+  const MASTER = fakeKey("M");
+  const SELF = fakeKey("S");
+  const USER_KEY = fakeKey("U");
+  const DEVICE = fakeKey("D");
+
+  function synapseShape(signedDevice: boolean) {
+    return {
+      device_keys: {
+        [USER]: {
+          DEVAAAA: {
+            user_id: USER,
+            device_id: "DEVAAAA",
+            keys: { [`ed25519:${DEVICE}`]: DEVICE },
+            signatures: {
+              [USER]: {
+                [`ed25519:${DEVICE}`]: "self",
+                ...(signedDevice ? { [`ed25519:${SELF}`]: "by-self-signing" } : {}),
+              },
+            },
+          },
+        },
+      },
+      master_keys: { [USER]: { usage: ["master"], user_id: USER, valid_until: "2027-11-23T07:52:42.743Z", keys: { [`ed25519:${MASTER}`]: MASTER } } },
+      self_signing_keys: { [USER]: { usage: ["self_signing"], user_id: USER, keys: { [`ed25519:${SELF}`]: SELF } } },
+      user_signing_keys: { [USER]: { usage: ["user_signing"], user_id: USER, keys: { [`ed25519:${USER_KEY}`]: USER_KEY } } },
+    };
+  }
+
+  it("sees the identity and the order MSK → SSK → USK", () => {
+    const report = readKeyQuery(USER, synapseShape(false) as unknown as Record<string, unknown>);
+    expect(report.hasIdentity).toBe(true);
+    expect(report.crossSigning.map((key) => key.usage?.[0])).toEqual(["master", "self_signing", "user_signing"]);
+    expect(report.devices).toHaveLength(1);
+    expect(report.devices[0].signedBySelfSigning).toBe(false);
+  });
+
+  it("a device signed by the self-signing key reads as verified", () => {
+    const report = readKeyQuery(USER, synapseShape(true) as unknown as Record<string, unknown>);
+    expect(report.devices[0].signedBySelfSigning).toBe(true);
+    // 字符串有效期要能读出来,否则整页都是「?」
+    expect(report.crossSigning[0].validUntilMs).toBe(Date.parse("2027-11-23T07:52:42.743Z"));
+    const lines = statusLines(report, { path: "/nonexistent", exists: false, mode: "", worldReadable: false });
+    expect(lines.join("\n")).toContain("signed by");
+    expect(lines.join("\n")).toContain("identity");
   });
 });

@@ -17,6 +17,15 @@ same report machine-readable. It writes nothing and never touches the crypto
 store. `--bootstrap` is the write half of the same command and has its own section
 below.
 
+Where the facts come from, measured 2026-11-23 on Synapse: `POST
+/keys/query` answers with `device_keys` (ordinary devices) plus three top-level
+maps — `master_keys`, `self_signing_keys`, `user_signing_keys`, keyed by user id.
+Cross-signing keys are *not* mixed into `device_keys`, so a reader that only
+walks `device_keys` reports "no identity" for an account that has one; the report
+now merges both shapes, top level first. `valid_until` is an ISO string, not a
+number. A cross-signing signature on a device does appear inside that device's
+`signatures` block, which is exactly the line this report turns into "signed by".
+
 ```
 $ pi-courier verify
 Account: @pico:matrix.enimatek.nl
@@ -37,7 +46,13 @@ since v1.11; Synapse merged it in June 2024, PR #17284) removed the password
 requirement for the *first* upload of `/_matrix/client/v3/keys/device_signing/upload`.
 So the bootstrap tries the plain upload and only asks for a password if this
 particular homeserver still demands a stage. That is why the command works
-headless in the normal case.
+headless in the normal case. Measured on this very account the same way: an empty
+body to `POST /_matrix/client/v3/keys/device_signing/upload` answers `200 {}`, the
+same body with `PUT` answers `405 M_UNRECOGNIZED` — MSC1756 specified POST and the
+spec text later said PUT, so the command tries POST first and PUT second and
+reports which one the server took. (While probing: `GET /_matrix/client/v3/versions`
+on this host also answers `404 M_UNRECOGNIZED`, which is worth knowing before
+anyone debugs a client that discovers features that way.)
 
 **The master key does not have to be signed by a device.** MSC1756 says a master
 key "may be signed by a device" — permissive. A self-signed MSK is legal, and
@@ -59,7 +74,8 @@ pi-courier verify --bootstrap [--dry-run] [--device <id>] [--password-file <0600
 
 Five steps, in this order, because each one can stop: generate MSK/SSK/USK
 locally; self-check every signature against its own public key (nothing goes up
-that fails its own check); `PUT /keys/device_signing/upload`; sign each of the
+that fails its own check); upload all three with `POST /keys/device_signing/upload`, falling
+back to PUT when the server only knows that verb; sign each of the
 account's own devices with the SSK and push it with `POST /keys/signatures/upload`
 (the stored device document goes back byte-for-byte with one signature added, its
 own self-signature included); write the private keys to

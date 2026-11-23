@@ -149,14 +149,24 @@ export function saveKeyBundle(bundlePath: string, bundle: IdentityBundle): void 
 
 // ---------- 上传 ----------
 
-/** 上传结果:成没成、服务端要不要 UIA、以及它的原话。 */
+/** 上传结果:成没成、服务端要不要 UIA、哪个动词成的、以及它的原话。 */
 export interface UploadOutcome {
   ok: boolean;
   /** 服务端要求的 UIA 类型(如 `m.login.password`);没要求时为空。 */
   uiaaTypes: string[];
   status: number;
+  /** 真正被接受的那个动词(试到第二个才成也要报出来)。 */
+  method?: string;
   error?: string;
 }
+
+/**
+ * `/_matrix/client/v3/keys/device_signing/upload` 的动词顺序。MSC1756 写的是
+ * POST,后来的 spec 文本改成了 PUT —— 两个服务端都见过:matrix.enimatek.nl 的
+ * Synapse 对 PUT 回 `405 M_UNRECOGNIZED`,对 POST 回 `200 {}`(空体探针实测)。
+ * 所以先 POST,认不出来再换 PUT。
+ */
+export const DEVICE_SIGNING_METHODS = ["POST", "PUT"] as const;
 
 function parseUiaa(body: unknown): { session: string; stages: string[] } | null {
   const value = body as { session?: string; flows?: { stages?: string[] }[] } | null;
@@ -203,22 +213,38 @@ function errorOf(body: Record<string, unknown> | null, status: number): string {
 }
 
 /** 上传身份(MSK/SSK/USK)。按 MSC3967,首次上传不需要 UIA。 */
-export function uploadIdentity(deps: {
+export async function uploadIdentity(deps: {
   fetch: typeof fetch;
   homeserver: string;
   accessToken: string;
   bundle: IdentityBundle;
   password?: string;
+  methods?: readonly string[];
 }): Promise<UploadOutcome> {
-  return uiaaRequest({
-    fetch: deps.fetch,
-    url: `${deps.homeserver}/_matrix/client/v3/keys/device_signing/upload`,
-    method: "PUT",
-    accessToken: deps.accessToken,
-    userId: deps.bundle.userId,
-    payload: identityUploadPayload(deps.bundle),
-    password: deps.password,
-  });
+  let last: UploadOutcome | null = null;
+  for (const method of deps.methods ?? DEVICE_SIGNING_METHODS) {
+    const outcome = await uiaaRequest({
+      fetch: deps.fetch,
+      url: `${deps.homeserver}/_matrix/client/v3/keys/device_signing/upload`,
+      method,
+      accessToken: deps.accessToken,
+      userId: deps.bundle.userId,
+      payload: identityUploadPayload(deps.bundle),
+      password: deps.password,
+    });
+    // 「这个动词我不认」不是失败,是换个动词的理由;其余失败照原样交回去。
+    if (outcome.ok) return { ...outcome, method };
+    last = { ...outcome, method };
+    if (!looksUnrecognized(outcome)) return last;
+  }
+  return last!;
+}
+
+/** 服务端说「这条路/这个动词不存在」—— 405 与 404 都见过。 */
+export function looksUnrecognized(outcome: UploadOutcome): boolean {
+  if (outcome.status !== 404 && outcome.status !== 405) return false;
+  const text = outcome.error ?? "";
+  return /unrecognized|unrecognised|M_UNRECOGNIZED|no such (path|route)/i.test(text) || text === "";
 }
 
 /**
