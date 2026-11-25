@@ -220,6 +220,18 @@ export class MatrixRoomOps implements RoomOps {
     this.deps.onLeftRoom(roomId);
   }
 
+  /** Who is in the room (MXIDs). Query member: a room we cannot read answers
+   *  with an empty list rather than throwing, so a caller that only wants to
+   *  match names against faces never has to guard a reply path. */
+  async listRoomMembers(roomId: string): Promise<string[]> {
+    try {
+      const members = await this.client.getJoinedRoomMembers(roomId);
+      return Array.isArray(members) ? members : [];
+    } catch {
+      return [];
+    }
+  }
+
   /** 票02(spec #299):登记一个 bot 身份进房间 —— 每 bot 一条状态事件,
    *  state_key = 其 MXID,内容带写入方署名;同 MXID 幂等覆盖,无写冲突。 */
   async registerRoomBot(roomId: string, botUserId: string): Promise<void> {

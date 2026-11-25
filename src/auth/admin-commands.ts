@@ -24,6 +24,10 @@ export type AdminEffect =
   /** 终答是否点名提问人(spec #364):与上面两个显示偏好同契约 —— 效果
    *  回传给调用方落盘,本模块不碰配置。注意它是**正**字段:true = 点名。 */
   | { kind: "mentionAsker"; value: boolean }
+  /** Whether hand-written handles in an answer become real mentions
+   *  (mentionHandles): same contract as the display preferences above — the
+   *  effect travels back to the caller, this module never writes config. */
+  | { kind: "mentionHandles"; value: boolean }
   /** 已读回执开关(同上族):正语义,true = 发回执。 */
   | { kind: "readReceipts"; value: boolean }
   /** Trust was just granted to this user via a passed challenge — the caller
@@ -58,6 +62,9 @@ export interface AdminCommandInput {
   /** Current asker-mention state (same read-then-flip contract, positive
    *  field: true = 终答点名)。 */
   mentionAsker?: boolean;
+  /** Current handle-mention state (same read-then-flip contract, positive:
+   *  true = a `@name` in the answer that matches a room member is tagged). */
+  mentionHandles?: boolean;
   /** Current read-receipt state (same contract, positive: true = 发已读回执;
    *  缺省未写 = 开,所以下一次翻转要仍到「关」)。 */
   readReceipts?: boolean;
@@ -229,6 +236,18 @@ export function handleAdminCommand(auth: ChallengeAuth, input: AdminCommandInput
         replies: [t("cmd.togglemention.ok", { state: next ? t("cmd.togglemention.on") : t("cmd.togglemention.off") })],
         notifications: [],
         effects: [{ kind: "mentionAsker", value: next }],
+      });
+    }
+
+    case "/toggletags": {
+      // Handles the answer writes by hand (@claude, @ada:example.org) become
+      // mentions when they match a member of this room. Same contract as
+      // /togglemention: only the effect goes back, the caller persists it.
+      const next = !input.mentionHandles;
+      return handled({
+        replies: [t("cmd.toggletags.ok", { state: next ? t("cmd.toggletags.on") : t("cmd.toggletags.off") })],
+        notifications: [],
+        effects: [{ kind: "mentionHandles", value: next }],
       });
     }
 

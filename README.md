@@ -263,7 +263,7 @@ You are now a trusted user (the first trusted user also becomes admin). In multi
 | `/reload` | Restart pi (after installing extensions/config); `/reload all` restarts every idle pi process of the instance |
 | `/help` | Full help |
 
-**Bridge admin commands**: `/trusted`, `/revoke <userId>`, `/channels`, `/enable [chatId] <mode>`, `/disable <chatId>`, `/toggletools` (project rooms: `/toggletools <auto|on|off>` overrides tool-call display per room — `auto` keeps owner rooms on and guest collaboration rooms off; spec #299), `/togglefooter` (switches the reply status footer — `📂 working directory · 📜 context usage · 🤖 model·thinking` under every final answer — on and off; global, persisted as `hideStatusFooter`), `/togglemention` (tags whoever asked at the top of every final answer — their `@user:server` in the text plus MSC3089 `m.mentions`, which is the part that actually notifies them; global, persisted as `mentionAsker`), `/togglereads` (switches the read receipt that marks your message as seen once the bridge accepts it; global, persisted as `readReceipts`, on by default)
+**Bridge admin commands**: `/trusted`, `/revoke <userId>`, `/channels`, `/enable [chatId] <mode>`, `/disable <chatId>`, `/toggletools` (project rooms: `/toggletools <auto|on|off>` overrides tool-call display per room — `auto` keeps owner rooms on and guest collaboration rooms off; spec #299), `/togglefooter` (switches the reply status footer — `📂 working directory · 📜 context usage · 🤖 model·thinking` under every final answer — on and off; global, persisted as `hideStatusFooter`), `/togglemention` (tags whoever asked at the top of every final answer — their `@user:server` in the text plus MSC3089 `m.mentions`, which is the part that actually notifies them; global, persisted as `mentionAsker`), `/toggletags` (tags the people an answer mentions by hand — every `@name` that matches a member of that room joins the mention line above; global, persisted as `mentionHandles`), `/togglereads` (switches the read receipt that marks your message as seen once the bridge accepts it; global, persisted as `readReceipts`, on by default)
 
 **Anything else** starting with `/` passes through to pi directly — extension commands, `/skill:name`, prompt templates. Plain text is a normal conversation turn.
 
@@ -318,6 +318,18 @@ The other half of that signal is a **read receipt**: when the bridge accepts you
 By default an answer is a plain message — nothing pulls a particular person back to the room. Turn it on with `/togglemention` (persisted as `mentionAsker`) and every **final answer** opens with the asker's full `@user:server` **and** carries MSC3089 `m.mentions` on that same event: the tag is the part you see, `m.mentions` is the part your client's push rules actually read. In a shared room that is the difference between "the bot answered at some point" and "my task is done".
 
 Three deliberate limits: only final answers — intermediate tool-loop turns and the live tool card never tag, so a 20-step task notifies once instead of twenty; exactly one event per answer, even when a long answer is split into several messages; and the tag follows whoever asked *this* turn, not whoever spoke last.
+
+### Notifications: an answer that names a person can tag them too
+
+`/toggletags` (persisted as `mentionHandles`) covers the other half of the same problem. pi writes people into prose — "claude already reviewed this", "ask @ada:example.org" — and on Matrix an `@name` in a message body notifies nobody: push rules read the structured MSC3089 `m.mentions` field. With it on, the bridge scans a final answer for handles, matches each one against who is actually in that room, and adds everyone it recognises to the mention line above the answer, beside the asker and in the same event:
+
+```
+@barry:server                      ← who asked (mentionAsker)
+@claude:cluephone.org              ← named by the answer, matched to a room member
+Reviewed with claude, who signed it off — see @claude:cluephone.org.
+```
+
+The room is the namespace, which is what keeps this safe to leave on. A handle is tagged only when exactly one member of that room answers to it; `@ada` with two Adas present, `@nobody` who is not in the room, the bridge's own name, and anything past the eighth handle are all left as plain text (the debug log says which and why). Code is not prose: fenced blocks and `inline code` are skipped, and a `/` ends a candidate, so `@Override`, `@keyframes` in a stylesheet and npm scopes such as `@matrix-org/…` never become mentions. The membership read is cached for a minute and gives up after two seconds — a room whose member list cannot be read produces an answer identical to one with the feature off. The full rule set is in `docs/specs/mention-handles.md`.
 
 ### Workflow progress live card
 
@@ -519,7 +531,7 @@ Mention detection accepts the written form (`@bot`, `@bot:server`) **and** the c
 Sharing the bot with teammates doesn't have to mean sharing admin power. List guests by hand in `auth.guestUsers` (MXIDs in the same `matrix:@user:server` form as `trustedUsers`; takes effect on restart), and they get a middle tier:
 
 - **Guests can** chat, send attachments, use read-only commands (`/help` `/status` `/cost` `/models` `/queue` …) in DMs and in groups enabled for everyone;
-- **Guests cannot** touch the dangerous surface — the bridge rejects it **before** anything runs, with a polite `🚫 This command requires trusted-user permission: <command>`: shell execution (`!` `!!` `/bash` `/bashstop`), project management (`/pmctl*`), auth (`/login` `/logout` `/auth`), lifecycle (`/reload` `/stop` `/interrupt` `/enable` `/disable` `/switch` `/multiproject`), the trust list (`/trusted` `/revoke` `/toggletools` `/togglefooter` `/togglemention` `/togglereads`), proactive sends (`/remind`) and session mirror (`/attach` `/detach`);
+- **Guests cannot** touch the dangerous surface — the bridge rejects it **before** anything runs, with a polite `🚫 This command requires trusted-user permission: <command>`: shell execution (`!` `!!` `/bash` `/bashstop`), project management (`/pmctl*`), auth (`/login` `/logout` `/auth`), lifecycle (`/reload` `/stop` `/interrupt` `/enable` `/disable` `/switch` `/multiproject`), the trust list (`/trusted` `/revoke` `/toggletools` `/togglefooter` `/togglemention` `/toggletags` `/togglereads`), proactive sends (`/remind`) and session mirror (`/attach` `/detach`);
 - Every denial is logged to the audit trail (see below); the boundary is the bridge, not the model's manners — though note the honest limit: a guest's *conversation* can still drive the agent's own tools (pi has no per-session tool switch; that's upstream territory);
 - Room modes keep their semantics: a `trusted-only` group keeps guests outside entirely (mode first, tier second), and guests never trigger the pairing challenge — pre-listed, they just chat.
 

@@ -38,6 +38,7 @@ import { inviteUserToManagementRoomOnce, inviteUserToSpaceOnce, maybeInitManagem
 import type { JsonStateFile } from "../state/json-file.js";
 import { formatBytes } from "../transports/attachments.js";
 import type { RoomOps } from "../transports/interface.js";
+import { createMentionResolver } from "../mentions/outbound.js";
 import type { MatrixReaction } from "../transports/matrix.js";
 import type { ExternalMessage, MessageAttachment, ReplyTarget, SendOptions } from "../types.js";
 import type { UpdateOrchestrator } from "../update/updater.js";
@@ -327,6 +328,16 @@ function attachmentErrorReply(reason: string): string {
 
 export function createMessageRouter(deps: MessageRouterDeps): MessageRouter {
   const { projectManager, auth, sendReply, sendTyping, markRead, roomOps, store, pmctl, managementRoomAdoptionAllowed } = deps;
+
+  // Hand-written handles in an answer (`@claude`, `@ada:example.org`) become
+  // real mentions when they match a member of the room being answered to
+  // (docs/specs/mention-handles.md). Resolution reads the room's membership, so
+  // it lives behind the transport; when the transport has no rooms (or the read
+  // fails) it resolves to nothing and answers look exactly like before.
+  const mentionResolver = createMentionResolver({
+    roomOps,
+    selfUserId: () => roomOps?.getBotUserId() ?? null
+  });
   const bindings = new WeakMap<PiRpc, RoomBinding>();
   const bindReplyTarget = (rpc: PiRpc, replyTarget: ReplyTarget, pinned: boolean): void => {
     bindings.set(rpc, { pinned, replyTarget });
@@ -945,6 +956,7 @@ export function createMessageRouter(deps: MessageRouterDeps): MessageRouter {
           hideToolCalls: store.get().hideToolCalls,
           hideStatusFooter: store.get().hideStatusFooter,
           mentionAsker: store.get().mentionAsker,
+          mentionHandles: store.get().mentionHandles,
           // 缺省未写 = 开,所以这里传**生效值**而非原始字段:否则新鲜配置上第一次
           // 翻转会从「(未写)开」翻成「显式开」—— 看起来像命令没反应。
           readReceipts: store.get().readReceipts !== false,
@@ -970,6 +982,8 @@ export function createMessageRouter(deps: MessageRouterDeps): MessageRouter {
             store.update({ hideStatusFooter: effect.value });
           } else if (effect.kind === "mentionAsker") {
             store.update({ mentionAsker: effect.value });
+          } else if (effect.kind === "mentionHandles") {
+            store.update({ mentionHandles: effect.value });
           } else if (effect.kind === "readReceipts") {
             store.update({ readReceipts: effect.value });
           } else if (effect.kind === "spaceInvite" && roomOps) {
@@ -1831,14 +1845,29 @@ export function createMessageRouter(deps: MessageRouterDeps): MessageRouter {
           // `@user:server`,MSC3089 的 m.mentions 也只随那一片 —— 通知按事件
           // 计,所以分片长文恰好点一次。工具循环的中间消息不点名(否则一步
           // 一条通知);关掉时终答与未启用时逐字节一致。
-          const mention = !turn.pendingTools && store.get().mentionAsker ? target.userId : undefined;
+          //
+          // /toggletags (docs/specs/mention-handles.md) adds the people the
+          // answer itself names: every handle matching a member of this room is
+          // appended to the same first-chunk list, so one event carries one
+          // notification per person. Scanning the answer's own text (not the
+          // footer) keeps the two features independent and keeps a disabled
+          // bridge byte-identical to before.
+          const asker = !turn.pendingTools && store.get().mentionAsker ? target.userId : undefined;
+          let mentionIds: string[] = asker ? [asker] : [];
+          if (!turn.pendingTools && store.get().mentionHandles) {
+            const answerText = typeof turn.fullText === "string" ? turn.fullText : "";
+            const tagged = await mentionResolver
+              .resolve(target.chatId, answerText, mentionIds)
+              .catch(() => [] as string[]);
+            mentionIds = [...mentionIds, ...tagged];
+          }
           outgoing.forEach((chunk, index) => {
-            const tag = index === 0 ? mention : undefined;
+            const tag = index === 0 && mentionIds.length > 0 ? mentionIds.join("\n") : undefined;
             sendReply(
               target.chatId,
               target.transport,
               tag ? `${tag}\n${chunk}` : chunk,
-              tag ? { mentionUserIds: [tag] } : undefined
+              tag ? { mentionUserIds: mentionIds } : undefined
             ).catch(() => {});
           });
         };

@@ -60,6 +60,12 @@ export interface RoomOps {
   /** Set a user's power level in a room (project owner -> admin; since #42
    *  also the trusted-user admin rule). */
   setUserPowerLevel(roomId: string, userId: string, level: number): Promise<void>;
+  /** Who is in a room right now, as MXIDs. Query member: an empty list means
+   *  "nobody could be read" (not connected, room not visible, no permission) —
+   *  callers must treat it as "match nobody", never as "the room is empty".
+   *  Optional: only the Matrix adapter has rooms with members. Used by the
+   *  outgoing handle matcher (docs/specs/mention-handles.md). */
+  listRoomMembers?(roomId: string): Promise<string[]>;
   /** Read a room's power-level state (m.room.power_levels content), or null
    *  when the room has no (visible) such state — 404 / M_NOT_FOUND. Like the
    *  other query members this reports absence instead of throwing; the

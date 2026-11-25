@@ -263,7 +263,7 @@ pi-courier enable     # 安装 systemd 服务:开机自启 + 立即启动(Linux;
 | `/reload` | 重启 pi(装完扩展/配置后);`/reload all` 重启本实例全部空闲 pi 进程 |
 | `/help` | 完整帮助 |
 
-**bridge 管理命令**:`/trusted`、`/revoke <userId>`、`/channels`、`/enable [chatId] <模式>`、`/disable <chatId>`、`/toggletools`(项目房内:`/toggletools <auto|on|off>` 按房间覆盖工具流显示 —— auto=owner 房开/guest 协作房关,spec #299)、`/togglefooter`(开关回复末尾状态脚注 —— 终答下方 `📂 工作目录 · 📜 上下文占用 · 🤖 模型·思考` 那一行;全局生效,落盘为 `hideStatusFooter`)、`/togglemention`(终答开头点名提问者 —— 正文里的 `@user:server` 加上 MSC3089 `m.mentions`,后者才是客户端发通知的依据;全局生效,落盘为 `mentionAsker`)、`/togglereads`(开关已读回执 —— 桥受理你那条消息后把它标成已读;全局生效,落盘为 `readReceipts`,缺省开)
+**bridge 管理命令**:`/trusted`、`/revoke <userId>`、`/channels`、`/enable [chatId] <模式>`、`/disable <chatId>`、`/toggletools`(项目房内:`/toggletools <auto|on|off>` 按房间覆盖工具流显示 —— auto=owner 房开/guest 协作房关,spec #299)、`/togglefooter`(开关回复末尾状态脚注 —— 终答下方 `📂 工作目录 · 📜 上下文占用 · 🤖 模型·思考` 那一行;全局生效,落盘为 `hideStatusFooter`)、`/togglemention`(终答开头点名提问者 —— 正文里的 `@user:server` 加上 MSC3089 `m.mentions`,后者才是客户端发通知的依据;全局生效,落盘为 `mentionAsker`)、`/toggletags`(终答里手写提到的人一并点名 —— 每个能对上本房成员的 `@name` 都会加入开头的点名行;全局生效,落盘为 `mentionHandles`)、`/togglereads`(开关已读回执 —— 桥受理你那条消息后把它标成已读;全局生效,落盘为 `readReceipts`,缺省开)
 
 **其他任何 `/` 开头的内容**都直接透传给 pi —— 扩展命令、`/skill:名称`、提示词模板由 pi 展开。普通文本就是正常对话。
 
@@ -318,6 +318,18 @@ pi 在处理你这一轮时,bot 会把房间的 **`……正在输入……`** �
 默认终答就是一条普通消息 —— 任何东西都不会把某个具体的人拉回房间。用 `/togglemention` 打开(落盘为 `mentionAsker`)后,每条**终答**行首附上提问者的完整 `@user:server`,并且**同一条事件**带上 MSC3089 的 `m.mentions`:你看到的是前面那个名字,客户端推送规则真正读的是后面那个字段。共享房间里,「桥不知道什么时候回过了」与「我的任务跑完了」的差别就在这里。
 
 三处刻意限制:只点终答 —— 工具循环的中间回合与活卡从不点名,所以二十步的任务只通知一次而不是二十次;每条回答只落在一个事件上,长文分片也不会多出通知;而且点的是**本回合**提问的人,不是上一条消息的发言人。
+
+### 通知:终答里提到的人也能点名
+
+`/toggletags`(落盘为 `mentionHandles`)管的是同一枚硬币的另一面。pi 会把人写进正文 —— 「claude 已经看过了」、「去问 @ada:example.org」—— 而在 Matrix 上,正文里的 `@name` 不会通知任何人:推送规则读的是结构化的 MSC3089 `m.mentions` 字段。打开后,桥在终答里找出这些手写名字,逐个拿到当前房间的在房成员里对,对上的人全部加入开头那行点名(和提问者同属一条事件):
+
+```
+@barry:server                      ← 提问者(mentionAsker)
+@claude:cluephone.org              ← 终答里提到,并对上了房间成员
+和 claude 一起 review 过了,她已经签字 —— 见 @claude:cluephone.org。
+```
+
+房间就是命名空间,这也是它能安全开着的原因。只有一个房间成员能对上的名字才会被点名:房间里有两位 Ada 时的 `@ada`、不在房间的 `@nobody`、桥自己的名字,以及第八个之后的名字都保持为普通文本(debug 日志会写明是哪一种、为什么)。代码不是正文:代码块与 `行内代码` 会先被隔除,`/` 直接结束一个候选 —— 所以 `@Override`、样式表里的 `@keyframes` 和 `@matrix-org/…` 这类 npm 作用域都不会变成点名。成员查询缓存 60 秒、2 秒未果即放弃;读不到成员的房间,终答与未开启时逐字节一致。详见 `docs/specs/mention-handles.md`。
 
 ### 工作流进度活卡
 
@@ -518,7 +530,7 @@ ssh -L <端口>:127.0.0.1:<端口> <用户>@<桥主机>
 把 bot 分享给同事不必连管理员权限一起交出去。在 `auth.guestUsers` 里手工列访客(MXID,与 `trustedUsers` 同款 `matrix:@user:server` 形式;重启生效),他们即获得中间一档:
 
 - **访客可以**:在 DM 和全员启用的群里聊天、发附件、用只读命令(`/help` `/status` `/cost` `/models` `/queue` …);
-- **访客不能**碰危险面 —— 桥在**任何东西执行之前**就拦下,礼貌回执 `🚫 此命令需要信任用户权限:<命令>`:shell 执行(`!` `!!` `/bash` `/bashstop`)、项目管理(`/pmctl*`)、认证(`/login` `/logout` `/auth`)、生命周期(`/reload` `/stop` `/interrupt` `/enable` `/disable` `/switch` `/multiproject`)、信任名单(`/trusted` `/revoke` `/toggletools` `/togglefooter` `/togglemention` `/togglereads`)、主动外发(`/remind`)与会话镜像(`/attach` `/detach`);
+- **访客不能**碰危险面 —— 桥在**任何东西执行之前**就拦下,礼貌回执 `🚫 此命令需要信任用户权限:<命令>`:shell 执行(`!` `!!` `/bash` `/bashstop`)、项目管理(`/pmctl*`)、认证(`/login` `/logout` `/auth`)、生命周期(`/reload` `/stop` `/interrupt` `/enable` `/disable` `/switch` `/multiproject`)、信任名单(`/trusted` `/revoke` `/toggletools` `/togglefooter` `/togglemention` `/toggletags` `/togglereads`)、主动外发(`/remind`)与会话镜像(`/attach` `/detach`);
 - 每次拦截都进审计日志(见下节);权限边界在桥、不靠模型自觉 —— 但也如实声明边界:访客的**对话**仍可驱动 agent 自己的工具(pi 无按会话的工具开关,那是上游领地);
 - 房间模式语义优先:`trusted-only` 群照样把访客挡在门外;访客也**永不触发配对码** —— 名单内直接聊。
 

@@ -28,7 +28,7 @@ function textMessage(text: string): AssistantMessage {
  * channel modes) are under test. barry = admin + trusted; carol = trusted
  * non-admin; rooms pre-listed in `channels` are enabled.
  */
-function makeFixtures(opts: { multiProject?: boolean; managementRoomAdoptionAllowed?: () => boolean; space?: { enabled?: boolean; roomId?: string; invitedUsers?: string[] }; channels?: Record<string, { enabled: boolean; mode: "all" | "mentions" | "mentions-trusted" | "trusted-only" }>; hideStatusFooter?: boolean; mentionAsker?: boolean; readReceipts?: boolean } = {}) {
+function makeFixtures(opts: { multiProject?: boolean; managementRoomAdoptionAllowed?: () => boolean; space?: { enabled?: boolean; roomId?: string; invitedUsers?: string[] }; channels?: Record<string, { enabled: boolean; mode: "all" | "mentions" | "mentions-trusted" | "trusted-only" }>; hideStatusFooter?: boolean; mentionAsker?: boolean; mentionHandles?: boolean; roomMembers?: string[]; readReceipts?: boolean } = {}) {
   const codeBox: { current: string | null } = { current: null };
   // 已读回执走单独一条缝(spec:read-receipts.md),记在单独一张表里。
   const marks: Array<{ chatId: string; messageId: string }> = [];
@@ -76,6 +76,7 @@ function makeFixtures(opts: { multiProject?: boolean; managementRoomAdoptionAllo
     ...(opts.space ? { space: opts.space } : {}),
     ...(opts.hideStatusFooter ? { hideStatusFooter: true } : {}),
     ...(opts.mentionAsker ? { mentionAsker: true } : {}),
+    ...(opts.mentionHandles ? { mentionHandles: true } : {}),
     ...(opts.readReceipts === undefined ? {} : { readReceipts: opts.readReceipts }),
   }, () => {});
   const auth = new ChallengeAuth(
@@ -111,6 +112,11 @@ function makeFixtures(opts: { multiProject?: boolean; managementRoomAdoptionAllo
     getPowerLevels: vi.fn().mockResolvedValue(undefined),
     leaveRoom: vi.fn().mockResolvedValue(undefined),
     getBotUserId: vi.fn().mockReturnValue("@bot:server"),
+    // Hand-written handles are matched against who is really in the room, so
+    // the fixture decides membership; unset means "the transport cannot say".
+    ...(opts.roomMembers
+      ? { listRoomMembers: vi.fn(async (): Promise<string[]> => opts.roomMembers!) }
+      : {}),
     encryptionAvailable: true,
   };
   const fixture = makeRouterFixture({
@@ -586,6 +592,62 @@ describe("message-router multi-project routing", () => {
     expect(chunks[0]!.mentionUserIds).toEqual(["@barry:server"]);
     expect(chunks[1]!.text.startsWith("x")).toBe(true);
     expect(chunks[1]!.mentionUserIds).toBeUndefined();
+  });
+
+  // Hand-written handles in the answer join the same first-chunk line
+  // (docs/specs/mention-handles.md): asker first, then everyone the room
+  // recognises, in one event with one notification list.
+  it("mentionTags adds the people the answer names to the first chunk", async () => {
+    const fx = makeFixtures({
+      mentionAsker: true,
+      mentionHandles: true,
+      roomMembers: ["@barry:server", "@claude:cluephone.org", "@bot:server"]
+    });
+    const router = fx.makeRouter();
+    await router.handleIncoming(makeMsg({ text: "who reviewed it?" }));
+
+    router.handleEvent(
+      { type: "turn_end", message: textMessage("claude signed off, see @claude:cluephone.org; @nobody was absent") },
+      fx.rpc
+    );
+    await new Promise((r) => setTimeout(r, 0));
+    await new Promise((r) => setTimeout(r, 0));
+
+    const finalMessage = fx.replies.at(-1)!;
+    expect(finalMessage.text.startsWith("@barry:server\n@claude:cluephone.org\n")).toBe(true);
+    expect(finalMessage.mentionUserIds).toEqual(["@barry:server", "@claude:cluephone.org"]);
+  });
+
+  // The asker alone is the old shape, byte for byte: with the handle feature
+  // off nothing is looked up, so a room whose membership cannot be read is
+  // indistinguishable from a bridge that never had it.
+  it("mentionTags off leaves an answer that names people exactly as it was", async () => {
+    const fx = makeFixtures({ mentionAsker: true, hideStatusFooter: true, roomMembers: ["@claude:cluephone.org"] });
+    const router = fx.makeRouter();
+    await router.handleIncoming(makeMsg({ text: "hi" }));
+
+    router.handleEvent({ type: "turn_end", message: textMessage("ask @claude:cluephone.org") }, fx.rpc);
+    await new Promise((r) => setTimeout(r, 0));
+
+    const finalMessage = fx.replies.at(-1)!;
+    expect(finalMessage.text).toBe("@barry:server\nask @claude:cluephone.org");
+    expect(finalMessage.mentionUserIds).toEqual(["@barry:server"]);
+  });
+
+  // Handles alone, asker mention off: the asker is not tagged, the person the
+  // answer names is, and the bridge never tags itself.
+  it("mentionTags works with the asker mention off and skips the bridge", async () => {
+    const fx = makeFixtures({ mentionHandles: true, roomMembers: ["@barry:server", "@bot:server"] });
+    const router = fx.makeRouter();
+    await router.handleIncoming(makeMsg({ text: "hi" }));
+
+    router.handleEvent({ type: "turn_end", message: textMessage("@bot agrees, and @barry too") }, fx.rpc);
+    await new Promise((r) => setTimeout(r, 0));
+    await new Promise((r) => setTimeout(r, 0));
+
+    const finalMessage = fx.replies.at(-1)!;
+    expect(finalMessage.text.startsWith("@barry:server\n")).toBe(true);
+    expect(finalMessage.mentionUserIds).toEqual(["@barry:server"]);
   });
 
   // 缺省不开:终答逐字节回到点名功能之前(hideStatusFooter 只是把脚注拿掉,

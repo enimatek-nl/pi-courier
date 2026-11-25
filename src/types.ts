@@ -115,6 +115,16 @@ export interface MsgBridgeConfig {
    */
   mentionAsker?: boolean;
   /**
+   * Outgoing handle matching (mentionHandles, docs/specs/mention-handles.md):
+   * default off. When on, the bridge scans a final answer for hand-written
+   * handles (`@claude`, `@ada:example.org`) outside code, matches each against
+   * the members of the room the answer goes to, and prepends every person it
+   * recognised as `@user:server` — beside the asker mention, in the same first
+   * chunk, with the same MSC3089 `m.mentions.user_ids`. A handle that matches
+   * nobody, or matches two people, is left as plain text.
+   */
+  mentionHandles?: boolean;
+  /**
    * 已读回执(readReceipts,docs/specs/read-receipts.md):**缺省开**。开启后
    * 桥在受理一条消息(过了授权门、真的要看它)时把本房读序标到那条事件,
    * 发送方的客户端因此显示「已读」—— 与 typing 同族:一个说「它在动」,

@@ -54,6 +54,9 @@ const zh = {
   "cmd.togglemention.ok": "📣 终答开头点名提问者:{state}",
   "cmd.togglemention.on": "已开启",
   "cmd.togglemention.off": "已关闭",
+  "cmd.toggletags.ok": "🏷 点名终答中提到的人:{state}",
+  "cmd.toggletags.on": "已开启",
+  "cmd.toggletags.off": "已关闭",
   "cmd.togglereads.ok": "👁 已读回执:{state}",
   "cmd.togglereads.on": "已开启(对方能看到自己那条已被读)",
   "cmd.togglereads.off": "已关闭(桥不再标记任何已读)",
@@ -507,6 +510,7 @@ const zh = {
     "• `/toggletools` — 切换工具调用的显示/隐藏(隐藏后群里不刷 tool call)\n" +
     "• `/togglefooter` — 切换回复末尾状态脚注的显示/隐藏(终答下方 `📂 路径 · 📜 上下文 · 🤖 模型` 那一行)\n" +
     "• `/togglemention` — 切换终答开头是否点名提问者(`@user:server` + 真实点名标记,对方一定能收到通知)\n" +
+    "• `/toggletags` — 切换是否点名终答里手写提到的人(`@claude`、`@ada:example.org`):能对上的本房成员一并附在开头并通知\n" +
     "• `/togglereads` — 切换已读回执(那条「已读」标记 —— 缺省开)\n" +
     "\n" +
     "【多工程与项目】(管理房间)\n" +
