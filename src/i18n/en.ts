@@ -402,6 +402,7 @@ const en: Record<MessageKey, string> = {
   // ── router ────────────────────────────────────────────────────────────
   "common.unknownError": "unknown error",
   "router.turn.failed": "❌ Turn failed: {message}",
+  "router.turn.empty": "⚠️ The turn ended without an answer — I ran out of context or the model returned nothing. Ask again, or /compact first.",
   "router.attach.inject": "The user sent attachment(s) (view them with the read tool):",
   "router.attach.inject.sourced": "Attachment(s) from {user} in room {room} (view them with the read tool):",
   "router.quote.prefix": "\"Quoted from @{user}'s earlier message: {excerpt}\"",

@@ -1794,7 +1794,14 @@ export function createMessageRouter(deps: MessageRouterDeps): MessageRouter {
         log.info(`[agent] reply to @${target.username}: ${replyPreview.slice(0, 500)}${replyPreview.length > 500 ? "…" : ""}`);
 
         if (turn.fullText === null) {
-          // No content this turn — keep the binding for a follow-up turn
+          // A turn that produced nothing is invisible to the room by default —
+          // silence reads as being ignored. Say so once, and keep the binding
+          // for a follow-up turn. An abort is exempt: you stopped it on purpose,
+          // and answering that would talk over the /stop you just gave.
+          if (turnMessage?.stopReason !== "aborted") {
+            log.warn(`[agent] turn produced no content for @${target.username}; telling the room`);
+            sendReply(target.chatId, target.transport, t("router.turn.empty")).catch(() => {});
+          }
           return;
         }
 

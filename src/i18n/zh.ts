@@ -393,6 +393,7 @@ const zh = {
   // ── router(管道回执,message-router.ts)──────────────────────────────
   "common.unknownError": "未知错误",
   "router.turn.failed": "❌ 本轮失败: {message}",
+  "router.turn.empty": "⚠️ 本回合没有产出回答 —— 上下文耗尽或模型未返回内容。请再问一次，或先 /compact。",
   "router.attach.inject": "用户发来附件(请用 read 工具查看):",
   "router.attach.inject.sourced": "用户 {user} 在房间 {room} 发来附件(请用 read 工具查看):",
   "router.quote.prefix": "「引用自 @{user} 的历史消息:{excerpt}」",

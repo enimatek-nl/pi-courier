@@ -17,9 +17,14 @@ import { makeMsg, makeProjectManagerStub, makeRouterFixture } from "./helpers";
  */
 
 /** Assistant-shaped message with the stop-reason fields pi actually sends. */
-function assistantMessage(opts: { text?: string; stopReason?: string; errorMessage?: string } = {}): AssistantMessage {
-  const content: Array<{ type: string; text?: string }> = [];
+function assistantMessage(
+  opts: { text?: string; stopReason?: string; errorMessage?: string; thinkingOnly?: boolean } = {}
+): AssistantMessage {
+  const content: Array<{ type: string; text?: string; thinking?: string }> = [];
   if (opts.text !== undefined) content.push({ type: "text", text: opts.text });
+  // The shape a real model produces when it reasons and never writes: a thinking
+  // block and nothing else.
+  if (opts.thinkingOnly) content.push({ type: "thinking", thinking: "I will summarise the findings now." });
   return {
     role: "assistant",
     content,
@@ -100,6 +105,31 @@ describe("error visibility routing (issue #52)", () => {
     expect(fx.replies).toHaveLength(2);
     expect(fx.replies[1]).toMatchObject({ chatId: "!dm:server" });
     expect(fx.replies[1].text).toContain("late boom");
+  });
+
+  // The 11:40 silence: a turn whose last message carried only thinking produced
+  // nothing, and the room saw no reply at all — indistinguishable from being ignored.
+  it("a content-less turn tells the room instead of staying silent", async () => {
+    const fx = makeFixtures();
+    await fx.router.handleIncoming(makeMsg({ text: "do work" }));
+
+    fx.router.handleEvent({ type: "turn_end", message: assistantMessage({ thinkingOnly: true }) }, fx.rpc);
+    await flush();
+    expect(fx.replies).toHaveLength(1);
+    expect(fx.replies[0]).toMatchObject({ chatId: "!dm:server", transport: "matrix" });
+    expect(fx.replies[0].text).toContain("本回合没有产出回答");
+  });
+
+  it("an aborted turn stays silent — you stopped it on purpose", async () => {
+    const fx = makeFixtures();
+    await fx.router.handleIncoming(makeMsg({ text: "do work" }));
+
+    fx.router.handleEvent(
+      { type: "turn_end", message: assistantMessage({ stopReason: "aborted", errorMessage: "user cancelled" }) },
+      fx.rpc
+    );
+    await flush();
+    expect(fx.replies).toHaveLength(0);
   });
 
   it("an error turn keeps the binding so the post-retry final answer reaches the room (spec #335)", async () => {
