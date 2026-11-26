@@ -18,13 +18,14 @@ import { makeMsg, makeProjectManagerStub, makeRouterFixture } from "./helpers";
 
 /** Assistant-shaped message with the stop-reason fields pi actually sends. */
 function assistantMessage(
-  opts: { text?: string; stopReason?: string; errorMessage?: string; thinkingOnly?: boolean } = {}
+  opts: { text?: string; stopReason?: string; errorMessage?: string; thinkingOnly?: boolean; toolOnly?: boolean } = {}
 ): AssistantMessage {
   const content: Array<{ type: string; text?: string; thinking?: string }> = [];
   if (opts.text !== undefined) content.push({ type: "text", text: opts.text });
   // The shape a real model produces when it reasons and never writes: a thinking
   // block and nothing else.
   if (opts.thinkingOnly) content.push({ type: "thinking", thinking: "I will summarise the findings now." });
+  if (opts.toolOnly) content.push({ type: "toolCall", name: "bash", arguments: { command: "ls" }, id: "t1" });
   return {
     role: "assistant",
     content,
@@ -33,7 +34,7 @@ function assistantMessage(
   } as unknown as AssistantMessage;
 }
 
-function makeFixtures(opts: { projectRoom?: boolean } = {}) {
+function makeFixtures(opts: { projectRoom?: boolean; notifyEmptyTurn?: boolean } = {}) {
   const replies: Array<{ chatId: string; transport: string; text: string }> = [];
   const rpc = {
     prompt: vi.fn().mockResolvedValue(undefined),
@@ -47,7 +48,12 @@ function makeFixtures(opts: { projectRoom?: boolean } = {}) {
   const { router } = makeRouterFixture({
     rpc,
     projectManager,
-    store: new ConfigStore({ managementRooms: ["!dm:server"], projects: {}, multiProject: true }),
+    store: new ConfigStore({
+      managementRooms: ["!dm:server"],
+      projects: {},
+      multiProject: true,
+      ...(opts.notifyEmptyTurn === undefined ? {} : { notifyEmptyTurn: opts.notifyEmptyTurn }),
+    }),
     sendReply: async (chatId: string, transport: string, text: string) => {
       replies.push({ chatId, transport, text });
     },
@@ -117,10 +123,32 @@ describe("error visibility routing (issue #52)", () => {
     await flush();
     expect(fx.replies).toHaveLength(1);
     expect(fx.replies[0]).toMatchObject({ chatId: "!dm:server", transport: "matrix" });
-    expect(fx.replies[0].text).toContain("本回合没有产出回答");
+    expect(fx.replies[0].text).toContain("本回合没有回答");
   });
 
-  it("an aborted turn stays silent — you stopped it on purpose", async () => {
+  // The spam this notice created: a model emitting thinking-only turns produced
+  // one notice per tool call, 25 lines in 3 minutes.
+  it("a content-less turn still holding tool calls is mid-loop, not silent", async () => {
+    const fx = makeFixtures();
+    await fx.router.handleIncoming(makeMsg({ text: "do work" }));
+
+    fx.router.handleEvent({ type: "turn_end", message: assistantMessage({ toolOnly: true }) }, fx.rpc);
+    await flush();
+    // The tool line is this room's own card and is expected; the point is that the
+    // mid-loop turn never produces the empty-turn notice.
+    for (const r of fx.replies) expect(r.text).not.toContain("没有回答");
+  });
+
+  it("notifyEmptyTurn: false restores the silence", async () => {
+    const fx = makeFixtures({ notifyEmptyTurn: false });
+    await fx.router.handleIncoming(makeMsg({ text: "do work" }));
+
+    fx.router.handleEvent({ type: "turn_end", message: assistantMessage({ thinkingOnly: true }) }, fx.rpc);
+    await flush();
+    expect(fx.replies).toHaveLength(0);
+  });
+
+    it("an aborted turn stays silent — you stopped it on purpose", async () => {
     const fx = makeFixtures();
     await fx.router.handleIncoming(makeMsg({ text: "do work" }));
 

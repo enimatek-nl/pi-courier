@@ -132,6 +132,13 @@ export interface MsgBridgeConfig {
    */
   readReceipts?: boolean;
   /**
+   * 空回合提示(notifyEmptyTurn,spec #364 后续):**缺省开**。一个回合没有产出
+   * 任何文本(上下文耗尽、模型只出思考)时,房间默认什么都看不见 —— 与「被忽略」
+   * 无法区分,提问者只好以为桥死了。开启后发一行提示。false = 恢复静默。
+   * 用户主动 /stop 的回合永远静默,与本开关无关。
+   */
+  notifyEmptyTurn?: boolean;
+  /**
    * 工具循环中间回合聚合(issue #235):默认开启 —— 中间回合不再逐条刷屏,
    * 而是聚合进同一张「工作中」的活卡持续就地刷新(Matrix MSC2676 消息编辑),
    * 终答回合仍是独立新消息。false = 完全旁路,与旧版逐条发送逐字节一致。

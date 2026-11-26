@@ -313,6 +313,8 @@ In a quiet setup that single line *is* the progress surface: with tool calls hid
 
 The other half of that signal is a **read receipt**: when the bridge accepts your message it marks the room read up to it, so your client's `seen` marker moves — "typing…" says it is busy, the receipt says which of your messages it has. Receipts go out for accepted messages only (what a room mode ignores stays unread on purpose), they never delay or gate a reply, and one `/togglereads` switches them off (`readReceipts: false` in the config, on by default).
 
+If a turn produces no answer at all — context exhausted, or a model that returned thinking and no text — you get one line saying so (`⚠️ No answer this turn — …`) instead of silence, since silence is indistinguishable from being ignored. Turns you stopped with `/stop` and turns still waiting on tool calls stay quiet, and `"notifyEmptyTurn": false` in the config restores silence everywhere (spec #365).
+
 ### Notifications: a final answer can tag whoever asked
 
 By default an answer is a plain message — nothing pulls a particular person back to the room. Turn it on with `/togglemention` (persisted as `mentionAsker`) and every **final answer** opens with the asker's full `@user:server` **and** carries MSC3089 `m.mentions` on that same event: the tag is the part you see, `m.mentions` is the part your client's push rules actually read. In a shared room that is the difference between "the bot answered at some point" and "my task is done".

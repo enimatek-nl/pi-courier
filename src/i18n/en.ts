@@ -402,7 +402,8 @@ const en: Record<MessageKey, string> = {
   // ── router ────────────────────────────────────────────────────────────
   "common.unknownError": "unknown error",
   "router.turn.failed": "❌ Turn failed: {message}",
-  "router.turn.empty": "⚠️ The turn ended without an answer — I ran out of context or the model returned nothing. Ask again, or /compact first.",
+  "router.turn.empty": "⚠️ No answer this turn — context ran out or the model returned nothing. Send your message again.",
+  "router.turn.empty.compacted": "⚠️ No answer this turn — the context filled up and was compacted. Send your message again, or /compact first.",
   "router.attach.inject": "The user sent attachment(s) (view them with the read tool):",
   "router.attach.inject.sourced": "Attachment(s) from {user} in room {room} (view them with the read tool):",
   "router.quote.prefix": "\"Quoted from @{user}'s earlier message: {excerpt}\"",

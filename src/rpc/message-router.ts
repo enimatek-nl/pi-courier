@@ -1798,8 +1798,17 @@ export function createMessageRouter(deps: MessageRouterDeps): MessageRouter {
           // silence reads as being ignored. Say so once, and keep the binding
           // for a follow-up turn. An abort is exempt: you stopped it on purpose,
           // and answering that would talk over the /stop you just gave.
-          if (turnMessage?.stopReason !== "aborted") {
-            log.warn(`[agent] turn produced no content for @${target.username}; telling the room`);
+          // Silence is only worth reporting at the end of a user turn. A turn that
+          // ends while still holding tool calls is mid-loop — pi issues the next
+          // turn right away — so announcing it would spam the room once per tool
+          // call, which is exactly what a first cut of this notice did (25 lines in
+          // 3 minutes). `notifyEmptyTurn: false` restores the old silence entirely.
+          if (
+            !turn.pendingTools &&
+            turnMessage?.stopReason !== "aborted" &&
+            store.get().notifyEmptyTurn !== false
+          ) {
+            log.warn(`[agent] turn produced no answer for @${target.username}; telling the room`);
             sendReply(target.chatId, target.transport, t("router.turn.empty")).catch(() => {});
           }
           return;
