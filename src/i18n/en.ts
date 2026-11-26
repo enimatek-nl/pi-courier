@@ -534,7 +534,8 @@ const en: Record<MessageKey, string> = {
     "• `/multiproject on|off` — multi-project mode toggle (restart to apply)\n" +
     "• `/pmctl new <name> <path>` — create a project\n" +
     "• `/pmctl list` — project list\n" +
-    "• `/pmctl bind <#alias|room ID> <path>` — give that channel its own pi process in <path>; `/pmctl guard <room> on` jails it there (admin room)\n" +
+    "• `/pmctl bind <#alias|room ID> <path>` — give that channel its own pi process, rooted at <path>\n" +
+    "• `/pmctl guard <#alias|room ID|name> <on|off>` — jail that channel in its bound directory, or release it (admin room)\n" +
     "• `/pmctl show|rm|mv|rename` — project details / delete / move / rename (rm needs a second confirmation; after confirming, the process stops and the bot leaves the room)\n" +
     "\n" +
     "**Pairing**: DM the bot for the first time → a 6-digit code appears in the bot's terminal and the management room → enter it in the chat where you received the prompt to become a trusted user (the first trusted user = admin). Group chats are enabled by a trusted user sending `/enable <mode>` in the group.",
@@ -592,7 +593,8 @@ const en: Record<MessageKey, string> = {
     "📁 **Project management** (this room only)\n" +
     "• `/pmctl new <name> [path]` — create a project (creates a private room and invites you)\n" +
     "• `/pmctl list` — project list\n" +
-    "• `/pmctl bind <#alias|room ID> <path>` — give that channel its own pi process in <path>; `/pmctl guard <room> on` jails it there (admin room)\n" +
+    "• `/pmctl bind <#alias|room ID> <path>` — give that channel its own pi process, rooted at <path>\n" +
+    "• `/pmctl guard <#alias|room ID|name> <on|off>` — jail that channel in its bound directory, or release it (admin room)\n" +
     "• `/pmctl show|rm|mv|rename` — project details / delete / move / rename\n\n" +
     "⚡ **Common commands**\n" +
     "• `/stop` — stop the current task\n" +

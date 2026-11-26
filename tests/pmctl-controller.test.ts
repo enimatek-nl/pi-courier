@@ -1141,6 +1141,29 @@ describe("PmctlController share & wt (spec #299 票09)", () => {
     expect(pm.registerProject).toHaveBeenCalledWith("!resolved:server", resolve(jail), expect.any(String));
   });
 
+  it("guards a room named by alias, not only by the id Element could have copied", async () => {
+    // A directory that exists, because the jail-path rules run before anything
+    // is written and would (rightly) refuse an invented one first.
+    const jail = mkdtempSync(join(tmpDir, "jail-"));
+    pm.registerProject("!resolved:server", resolve(jail), "proj");
+    await handle("/pmctl guard #smaltino:server on");
+    expect(roomOps.resolveRoomId).toHaveBeenCalledWith("#smaltino:server");
+    expect(pm.setProjectGuard).toHaveBeenCalledWith("!resolved:server", true);
+  });
+
+  it("unbinds by alias for the same reason", async () => {
+    pm.registerProject("!resolved:server", "/srv/jail/room", "proj");
+    await handle("/pmctl unbind #smaltino:server");
+    expect(pm.removeProject).toHaveBeenCalledWith("!resolved:server");
+  });
+
+  it("names the alias it could not resolve instead of guarding nothing", async () => {
+    (roomOps.resolveRoomId as ReturnType<typeof vi.fn>).mockResolvedValueOnce(null);
+    await handle("/pmctl guard #ghost:server on");
+    expect(pm.setProjectGuard).not.toHaveBeenCalled();
+    expect(replies.at(-1)).toContain("找不到房间");
+  });
+
   // An alias nobody can resolve would be stored as a key no event ever carries
   // — the silent-injury bug /enable has with aliases today.
   it("refuses an alias that does not resolve and stores nothing", async () => {

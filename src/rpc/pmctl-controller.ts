@@ -245,10 +245,10 @@ export class PmctlController {
         await this.bind(rest, reply, roomOps);
         return true;
       case "unbind":
-        await this.unbind(rest, reply);
+        await this.unbind(rest, reply, roomOps);
         return true;
       case "guard":
-        await this.guard(rest, reply);
+        await this.guard(rest, reply, roomOps);
         return true;
       default:
         await reply(t("pmctl.unknownOp", { op }));
@@ -634,13 +634,15 @@ export class PmctlController {
 
   /** `/pmctl unbind <chatId|#alias>` — release a room's own instance. The
    *  directory survives: unbinding is about the binding, never about files. */
-  private async unbind(rest: string, reply: Reply): Promise<void> {
+  private async unbind(rest: string, reply: Reply, roomOps: RoomOps): Promise<void> {
     const [target] = splitFirst(rest);
     if (!target) {
       await reply(t("pmctl.unbind.usage"));
       return;
     }
-    const found = this.findProject(target);
+    const resolved = await this.resolveTargetRoom(target, roomOps, reply);
+    if (!resolved) return;
+    const found = this.findProject(resolved);
     if (!found) {
       await reply(t("pmctl.notFound", { target }));
       return;
@@ -654,13 +656,17 @@ export class PmctlController {
    *  Off is always allowed; on requires the directory rules, because a guard
    *  rooted at a directory that contains the bridge, the home folder or a
    *  credential store is a jail with the door wired open. */
-  private async guard(rest: string, reply: Reply): Promise<void> {
+  private async guard(rest: string, reply: Reply, roomOps: RoomOps): Promise<void> {
     const [target, state] = splitFirst(rest);
     if (!target || (state !== "on" && state !== "off")) {
       await reply(t("pmctl.guard.usage"));
       return;
     }
-    const found = this.findProject(target);
+    // Same address space as bind: Element copies a `#alias:server`, and a room
+    // can only be jailed by naming it the way the client names it.
+    const resolved = await this.resolveTargetRoom(target, roomOps, reply);
+    if (!resolved) return;
+    const found = this.findProject(resolved);
     if (!found) {
       await reply(t("pmctl.notFound", { target }));
       return;
