@@ -321,23 +321,6 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<void
     );
     matrix.setAttachmentStore(attachments);
     roomOps = matrix.roomOps;
-
-    // Channel keys written as `#alias:server` never match an event — authorisation
-    // looks rooms up by exact room id — so those rooms sit disabled while the
-    // config and `/channels` both claim otherwise. Repair them now that the
-    // homeserver is reachable, before any message is routed. Unresolvable aliases
-    // are left alone: a temporary lookup failure must not delete a decision.
-    if (roomOps?.resolveRoomId && config.auth?.channels && Object.keys(config.auth.channels).length > 0) {
-      const repaired = await migrateAliasChannelKeys(config.auth.channels, roomOps.resolveRoomId);
-      if (!repaired.unchanged) {
-        store.update({ auth: { ...store.get().auth, channels: repaired.channels } });
-        auth.loadFromConfig({ ...store.get().auth! });
-        logger.info(
-          `[channel-keys] rewrote ${repaired.moved.length} alias key(s), dropped ${repaired.dropped.length}; ` +
-            `${repaired.unresolved.length} left inert`
-        );
-      }
-    }
   }
 
   if (!matrix) {
@@ -745,6 +728,25 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<void
       throw new Error(`matrix connection failed: ${errorMessage(err)}`);
     });
     logger.info(`✅ transports connected: matrix=${matrix?.isConnected ? "up" : "down"}`);
+
+    // Channel keys written as `#alias:server` never match an event — authorisation
+    // looks rooms up by exact room id — so those rooms sit disabled while the
+    // config and `/channels` both claim otherwise. This repairs them, and it must
+    // run AFTER connect(): resolving an alias goes over the client, which does not
+    // exist before the transport connects — running it earlier made every lookup
+    // fail and left every alias key in place. Unresolvable aliases are left alone:
+    // a transient failure must not delete an operator's decision.
+    if (roomOps?.resolveRoomId && config.auth?.channels && Object.keys(config.auth.channels).length > 0) {
+      const repaired = await migrateAliasChannelKeys(config.auth.channels, (alias) => roomOps!.resolveRoomId!(alias));
+      if (!repaired.unchanged) {
+        store.update({ auth: { ...store.get().auth!, channels: repaired.channels } });
+        auth.loadFromConfig(store.get().auth!);
+        logger.info(
+          `[channel-keys] rewrote ${repaired.moved.length} alias key(s) to room ids, dropped ${repaired.dropped.length} duplicate(s)` +
+            (repaired.unresolved.length ? `, ${repaired.unresolved.length} still unresolved` : "")
+        );
+      }
+    }
   } catch (err) {
     logger.warn("⚠️ some transports failed to connect:", errorMessage(err));
     // Friendly diagnostics for the two common E2EE/device-state failures so

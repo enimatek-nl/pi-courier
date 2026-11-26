@@ -6,6 +6,7 @@
  */
 import { describe, expect, it, vi } from "vitest";
 import { migrateAliasChannelKeys, normalizeChannelArgument } from "../src/auth/channel-keys";
+import { MatrixRoomOps } from "../src/transports/matrix-rooms";
 
 const entry = (mode: string, enabled = true) => ({ enabled, mode });
 
@@ -61,6 +62,24 @@ describe("migrateAliasChannelKeys", () => {
     expect(report.unchanged).toBe(true);
     expect(report.channels).toBe(channels);
     expect(resolve).not.toHaveBeenCalled();
+  });
+});
+
+
+describe("the transport half of the repair", () => {
+  // The migration is correct in isolation and useless if it runs before the
+  // client exists: `resolveRoomId` goes over the client, which the transport
+  // creates in connect(). This is the ordering trap that made the first version
+  // of the repair log "does not resolve" for a perfectly good alias.
+  it("returns null before the client exists and the id afterwards", async () => {
+    const holder: { client?: unknown } = {};
+    const ops = new MatrixRoomOps({
+      getClient: () => holder.client as never,
+      getBotUserId: () => "@bot:server"
+    });
+    expect(await ops.resolveRoomId("#smaltino:server")).toBeNull();
+    holder.client = { resolveRoom: async (alias: string) => (alias === "#smaltino:server" ? "!LO2:server" : alias) };
+    expect(await ops.resolveRoomId("#smaltino:server")).toBe("!LO2:server");
   });
 });
 
