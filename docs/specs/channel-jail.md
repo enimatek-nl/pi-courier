@@ -63,8 +63,10 @@ what `/pmctl wt` and sibling rooms are for.
 
 Switching the guard on restarts the instance, and from the next message that process
 carries the guard. **The guard itself is the next change**, tracked here until it ships:
-an extension the jailed instance loads with the root in `PI_JAIL_ROOT`, refusing
-`tool_call`s that reach outside it. Until that lands, `guard on` is honest only about the
+an extension the jailed instance loads with `-e`, refusing `tool_call`s that reach
+outside its root — and, because the root must never disagree with the directory the
+operator bound, **the root is the instance's working directory**, read at extension
+load (see "Where the root comes from"). Until that lands, `guard on` is honest only about the
 instance and the directory, and says so out loud:
 
 > `• path guard: off (directory only — a separate cwd is not confinement)`
@@ -84,6 +86,30 @@ process", so:
   mounted — is what stands between a hostile channel member and this machine. That is the
   documented direction (pi describes Docker/OpenShell/Gondolin for exactly this) and it
   reuses everything above.
+
+## Where the root comes from
+
+`PI_JAIL_ROOT` was the design's first idea and is **not a pi variable** — pi knows no
+jail, sandbox or path-root variable (checked against its environment-variable list, the
+whole documentation tree and its CLI surface), and inventing a name that looks like one
+would read as if pi understood it. The root the guard enforces is therefore read from the
+child process's working directory, captured when the extension loads:
+
+- the bridge already sets that directory when it spawns the instance, so the enforced root
+  and the bound directory are the same value by construction — one cannot be forgotten,
+  renamed or left pointing at yesterday's path;
+- capturing it at load matters: the extension runs inside the pi process, so a `bash` tool
+  running `cd /etc` changes its own subprocess, not the host's directory, and pi offers no
+  `/cd` to move the session (both checked);
+- if a root different from the working directory is ever genuinely needed, the override is
+  `PI_COURIER_JAIL_ROOT`, namespaced so it cannot be mistaken for pi's own — `RpcClient`
+  accepts `args` and `env`, and the bridge already merges environment variables for the
+  proxy feature.
+
+The extension is loaded with `-e <path>` (a CLI extension), not from the jailed directory:
+project-local extensions are gated on project trust, and, more decisively, configuration
+that lives inside a jailed directory is configuration the jailed session can edit. Security
+settings do not get stored where the confined party has write access.
 
 ## Test anchors
 
