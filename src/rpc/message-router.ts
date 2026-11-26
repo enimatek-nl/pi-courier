@@ -10,6 +10,7 @@ import * as path from "node:path";
 import type { AssistantMessage } from "@earendil-works/pi-ai";
 import { AUDIT_EVENTS, type AuditLog } from "../audit/audit-log.js";
 import { handleAdminCommand } from "../auth/admin-commands.js";
+import { normalizeChannelArgument } from "../auth/channel-keys.js";
 import { type ChallengeAuth, parseChannelMode } from "../auth/challenge-auth.js";
 import { guestCommandVerdict } from "../auth/guest-policy.js";
 import { LoginManager } from "../auth/headless-login.js";
@@ -948,8 +949,16 @@ export function createMessageRouter(deps: MessageRouterDeps): MessageRouter {
         if (msg.isGroupChat || (!text.startsWith("/") && !/^\d{6}$/.test(text))) return false;
         const cmdName = text.split(/\s+/)[0].toLowerCase();
         if (text.startsWith("/") && cmdName === "/help") return false;
+        // `/enable #alias:server all` used to store the alias verbatim, and an
+        // alias key can never be hit by an exact room-id lookup — the room stayed
+        // disabled while the config said enabled. Resolve before writing, so the
+        // key matches the events it governs.
+        const commandText =
+          roomOps?.resolveRoomId && /^\/(enable|disable)(\s|$)/.test(text)
+            ? await normalizeChannelArgument(text, roomOps.resolveRoomId)
+            : text;
         const result = handleAdminCommand(auth, {
-          text,
+          text: commandText,
           userId: msg.userId,
           transport: msg.transport,
           chatId: msg.chatId,

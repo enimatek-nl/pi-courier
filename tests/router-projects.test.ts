@@ -95,6 +95,9 @@ function makeFixtures(opts: { multiProject?: boolean; managementRoomAdoptionAllo
     async (_chatId: string, _transport: string): Promise<void> => {}
   );
   const roomOps = {
+    // Aliases reach the bridge whenever Element copies a room link; the fake has
+    // to answer like the transport does or the alias tests below assert nothing.
+    resolveRoomId: vi.fn(async (idOrAlias: string) => (idOrAlias.startsWith("#") ? "!group:server" : idOrAlias)),
     createRoom: vi.fn().mockResolvedValue("!newroom:server"),
     createProjectRoom: vi.fn().mockResolvedValue("!newproj:server"),
     createSpace: vi.fn().mockResolvedValue("!space:server"),
@@ -772,6 +775,7 @@ describe("message-router authorization pipeline (real ChallengeAuth)", () => {
   let replies: Array<{ chatId: string; transport: string; text: string }>;
   let codeBox: { current: string | null };
   let makeRouter: () => ReturnType<typeof createMessageRouter>;
+  let roomOps: Record<string, ReturnType<typeof vi.fn>>;
 
   beforeEach(() => {
     const fx = makeFixtures({ multiProject: false });
@@ -780,10 +784,26 @@ describe("message-router authorization pipeline (real ChallengeAuth)", () => {
     replies = fx.replies;
     codeBox = fx.codeBox;
     makeRouter = fx.makeRouter;
+    roomOps = fx.roomOps as unknown as Record<string, ReturnType<typeof vi.fn>>;
   });
 
   const eveMsg = (content: string, overrides: Partial<ExternalMessage> & { text?: string; quoted?: { username: string; excerpt: string } } = {}): ExternalMessage =>
     makeMsg({ userId: "@eve:server", username: "eve", text: content, ...overrides });
+
+  // The key written must be the one events carry: an alias key never matches an
+  // exact room-id lookup, so enabling by alias used to look like success and do
+  // nothing.
+  it("DM /enable #alias stores the room id, not the alias", async () => {
+    const router = makeRouter();
+    await router.handleIncoming(makeMsg({ chatId: "!dm:server", isGroupChat: false, text: "/enable #alias:server mentions" }));
+    expect(roomOps.resolveRoomId).toHaveBeenCalledWith("#alias:server");
+    // The room is governed by the id now: a member's mention is served.
+    (rpc.prompt as ReturnType<typeof vi.fn>).mockClear();
+    await router.handleIncoming(
+      makeMsg({ chatId: "!group:server", isGroupChat: true, wasMentioned: true, userId: "@eve:server", username: "eve", text: "@bot hi" })
+    );
+    expect(rpc.prompt).toHaveBeenCalledWith("@bot hi");
+  });
 
   it("group /enable in an unenabled room works end-to-end (trusted user, mentions mode)", async () => {
     const router = makeRouter();

@@ -16,6 +16,7 @@ import * as path from "node:path";
 import { pathToFileURL } from "node:url";
 import { AUDIT_EVENTS, AuditLog } from "./audit/audit-log.js";
 import { ChallengeAuth } from "./auth/challenge-auth.js";
+import { migrateAliasChannelKeys } from "./auth/channel-keys.js";
 import {
   attachmentsDirectory,
   attachmentsMaxBytes,
@@ -320,6 +321,23 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<void
     );
     matrix.setAttachmentStore(attachments);
     roomOps = matrix.roomOps;
+
+    // Channel keys written as `#alias:server` never match an event — authorisation
+    // looks rooms up by exact room id — so those rooms sit disabled while the
+    // config and `/channels` both claim otherwise. Repair them now that the
+    // homeserver is reachable, before any message is routed. Unresolvable aliases
+    // are left alone: a temporary lookup failure must not delete a decision.
+    if (roomOps?.resolveRoomId && config.auth?.channels && Object.keys(config.auth.channels).length > 0) {
+      const repaired = await migrateAliasChannelKeys(config.auth.channels, roomOps.resolveRoomId);
+      if (!repaired.unchanged) {
+        store.update({ auth: { ...store.get().auth, channels: repaired.channels } });
+        auth.loadFromConfig({ ...store.get().auth! });
+        logger.info(
+          `[channel-keys] rewrote ${repaired.moved.length} alias key(s), dropped ${repaired.dropped.length}; ` +
+            `${repaired.unresolved.length} left inert`
+        );
+      }
+    }
   }
 
   if (!matrix) {

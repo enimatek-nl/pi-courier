@@ -128,6 +128,25 @@ $ PI_COURIER_JAIL_ROOT=/tmp/jailproof PI_COURIER_JAIL_HOME=/tmp/jailhome \
 [pi-courier jail] guarding /tmp/jailproof (home /tmp/jailhome)
 ```
 
+## Keys that events can match
+
+Authorisation reads channels by exact key — `channelAuth.get(chatId)` with the
+room id from the event. A config key written as `#alias:server` therefore matched
+nothing: the room stayed disabled while the config, and `/channels`, both said it
+was enabled. Two repairs, both in `src/auth/channel-keys.ts`:
+
+- **at startup**, alias keys in `auth.channels` are resolved and rewritten to the
+  room id, once the homeserver is reachable and before any message is routed. A
+  room entered twice (once by alias, once by id) keeps the **id** entry — it is the
+  one that has been governing events, and overwriting its mode would be an
+  unasked-for change. An alias that does not resolve is left exactly as it was:
+  a transient lookup failure must not delete an operator's decision.
+- **at write time**, `/enable` and `/disable` resolve a `#alias` argument first,
+  so typing what Element copied stores the key that governs.
+
+`/channels` marks an alias key it could not repair, because a listing that hides
+a dead entry is how this bug survived this long.
+
 ## Test anchors
 
 | Anchor | What it pins |
@@ -140,6 +159,8 @@ $ PI_COURIER_JAIL_ROOT=/tmp/jailproof PI_COURIER_JAIL_HOME=/tmp/jailhome \
 | same — the four `refuses a …` cases + `refuses a second guarded room over one directory` | the directory rules and the one-jail-one-directory rule |
 | same — `refuses /pmctl rm on a guarded project` | no orphan jails |
 | `tests/config.test.ts` — `keeps a guarded project binding across save and reload` | a jail that survives a restart |
+| `tests/channel-keys.test.ts` (8) | alias → id rewrite, the double-entry conflict keeping the id, an unresolvable alias left alone, `/enable` argument normalisation |
+| `tests/router-projects.test.ts` — `DM /enable #alias stores the room id, not the alias` | the key that gets written is the key events carry |
 | `tests/jail-rules.test.ts` (17) | traversal, symlink out, `~` against the jail home, sibling-prefix escape, the bash shapes, the sensitive half of `/etc` refused |
 | `tests/jail-spawn.test.ts` (6) | `-e` + `--no-approve` + jail env on a guarded spawn, an unguarded spawn byte-identical, one home per room |
 | `tests/jail-guard.test.ts` (4) | the compiled extension blocks an outside read, allows inside work, keeps the agent directory readable and unwritable, and still blocks an unknown tool |
