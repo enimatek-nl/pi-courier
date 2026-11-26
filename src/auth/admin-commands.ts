@@ -68,6 +68,15 @@ export interface AdminCommandInput {
   /** Current read-receipt state (same contract, positive: true = 发已读回执;
    *  缺省未写 = 开,所以下一次翻转要仍到「关」)。 */
   readReceipts?: boolean;
+  /**
+   * What `/channels` appends per room: the jail state, which lives on the
+   * project binding rather than the channel entry.
+   *
+   * Injected as a reader instead of importing ProjectManager: this module stays
+   * free of the RPC layer, and the caller already follows the read-then-pass
+   * contract for every other piece of live state it reports.
+   */
+  channelStatus?: (chatId: string) => string | undefined;
 }
 
 export interface AdminCommandResult {
@@ -191,9 +200,10 @@ export function handleAdminCommand(auth: ChallengeAuth, input: AdminCommandInput
       const channels = auth
         .exportConfig()
         .channels;
-      const lines = Object.entries(channels).map(
-        ([id, channel]) => `• ${id}: ${channel.enabled ? "✅" : "❌"} (${channel.mode})`
-      );
+      const lines = Object.entries(channels).map(([id, channel]) => {
+        const status = input.channelStatus?.(id);
+        return `• ${id}: ${channel.enabled ? "✅" : "❌"} (${channel.mode})${status ? ` ${status}` : ""}`;
+      });
       return handled({ replies: [lines.join("\n") || t("cmd.channels.empty")], notifications: [], effects: [] });
     }
 

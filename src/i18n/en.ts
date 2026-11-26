@@ -458,6 +458,9 @@ const en: Record<MessageKey, string> = {
   "router.multiproject.switched": "✅ Multi-project mode {state}.\nTakes effect on restart: run `pi-courier restart` ({detail})",
   "router.multiproject.detailOn": "after restart, the management room / project rooms /pmctl become available",
   "router.multiproject.detailOff": "after restart, every room connects straight to the default pi",
+  "router.channels.inertKey": "• ⚠️ alias key — nothing matches this; use the room id",
+  "router.channels.jailed": "• 🔒 jailed in {workdir}",
+  "router.channels.bound": "• 📁 bound to {workdir}",
   "router.multiproject.usage":
     "Current: {current}\n\nUsage:\n/multiproject on  — enable multi-project (restart to apply)\n/multiproject off — back to single-project (restart to apply)",
   "router.login.forbidden": "❌ Not allowed (only the admin can manage provider logins)",

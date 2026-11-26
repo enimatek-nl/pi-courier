@@ -960,6 +960,19 @@ export function createMessageRouter(deps: MessageRouterDeps): MessageRouter {
           // 缺省未写 = 开,所以这里传**生效值**而非原始字段:否则新鲜配置上第一次
           // 翻转会从「(未写)开」翻成「显式开」—— 看起来像命令没反应。
           readReceipts: store.get().readReceipts !== false,
+          // /channels is a DM command, so the operator reads it to decide what a
+          // room is. Two facts the channel entry cannot answer on its own:
+          // whether that room is jailed (it lives on the project binding) and
+          // whether the key itself can ever match an event (alias keys are
+          // exact-match dead weight — see docs/specs/channel-jail.md).
+          channelStatus: (chatId) => {
+            if (chatId.startsWith("#")) return t("router.channels.inertKey");
+            const bound = projectManager.listProjects().find(([id]) => id === chatId)?.[1];
+            if (!bound) return undefined;
+            return bound.guard
+              ? t("router.channels.jailed", { workdir: bound.workdir })
+              : t("router.channels.bound", { workdir: bound.workdir });
+          },
         });
         if (!result.handled) return false;
         // 审计(issue #124):纯模块裁决事件名,router 落账 —— 认证与信任

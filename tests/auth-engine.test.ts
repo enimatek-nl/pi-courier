@@ -522,3 +522,40 @@ describe("handleAdminCommand (pure in/out)", () => {
     expect(text).toContain("6 位验证码");
   });
 });
+
+describe("/channels listing", () => {
+  // The listing is what an operator reads before jailing a room, so a jail it
+  // does not mention is a listing that lies by omission.
+  it("shows the jail beside the room it belongs to", () => {
+    const { auth } = makeEngine({ "!room:server": { enabled: true, mode: "mentions-trusted" } });
+    const result = handleAdminCommand(auth, {
+      text: "/channels",
+      userId: "@barry:server",
+      transport: "matrix",
+      chatId: "!dm:server",
+      channelStatus: (id) => (id === "!room:server" ? "🔒 jailed in /srv/jail/room" : undefined)
+    });
+    expect(result.handled).toBe(true);
+    expect(result.replies[0]).toContain("mentions-trusted");
+    expect(result.replies[0]).toContain("🔒 jailed in /srv/jail/room");
+  });
+
+  it("marks an alias key as the dead entry it is", () => {
+    const { auth } = makeEngine({ "#ghost:server": { enabled: true, mode: "mentions-trusted" } });
+    const result = handleAdminCommand(auth, {
+      text: "/channels",
+      userId: "@barry:server",
+      transport: "matrix",
+      chatId: "!dm:server",
+      channelStatus: () => "⚠️ alias key — nothing matches this; use the room id"
+    });
+    expect(result.replies[0]).toContain("alias key");
+  });
+
+  it("still lists rooms when the caller passes no status reader", () => {
+    const { auth } = makeEngine({ "!room:server": { enabled: true, mode: "mentions-trusted" } });
+    const result = handleAdminCommand(auth, { text: "/channels", userId: "@barry:server", transport: "matrix" });
+    expect(result.handled).toBe(true);
+    expect(result.replies[0]).toContain("!room:server");
+  });
+});
