@@ -948,7 +948,9 @@ export function createMessageRouter(deps: MessageRouterDeps): MessageRouter {
         const { msg, text } = ctx;
         if (msg.isGroupChat || (!text.startsWith("/") && !/^\d{6}$/.test(text))) return false;
         const cmdName = text.split(/\s+/)[0].toLowerCase();
-        if (text.startsWith("/") && cmdName === "/help") return false;
+        // Help names are listings, not admin surface: `/help` is also swallowed by
+        // Element's composer, which is why `/commands` and `/pi-help` exist.
+        if (text.startsWith("/") && ["/help", "/commands", "/pi-help"].includes(cmdName)) return false;
         // `/enable #alias:server all` used to store the alias verbatim, and an
         // alias key can never be hit by an exact room-id lookup — the room stayed
         // disabled while the config said enabled. Resolve before writing, so the

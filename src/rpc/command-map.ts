@@ -1600,7 +1600,13 @@ export async function handleSlashCommand(
         return true;
       }
 
-      case "/help": {
+      // `/help` is eaten by Element Web's composer before it ever reaches the
+      // server, so the listing needs a name the client does not own. `/commands`
+      // is the one to advertise; `/pi-help` is the literal form for anyone who
+      // looks for the bridge behind pi.
+      case "/help":
+      case "/commands":
+      case "/pi-help": {
         await reply(helpText());
         return true;
       }

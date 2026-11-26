@@ -120,6 +120,10 @@ export const COMMAND_REGISTRY: readonly CommandPolicy[] = [
  *  钉住;/find(#118)与 /recap(#122)这类只读命令落地即在此列。 */
 export const GUEST_READ_ONLY_DOC: readonly string[] = [
   "/help",
+  // Aliases for the same listing: Element Web intercepts `/help` in its composer,
+  // so a room cannot always reach it by that name.
+  "/commands",
+  "/pi-help",
   "/status",
   "/cost",
   "/models",

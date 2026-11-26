@@ -308,6 +308,7 @@ const zh = {
     "• `/reload` — 重启 pi 进程(装插件/改配置后使用);`/reload all` — 重启本实例全部进程(空闲才重启,忙碌跳过)",
   "cmd.help.group.bridge":
     "**桥增强命令**(pi TUI 没有,本项目实现):\n" +
+    "(Element Web 会在输入框拦截 `/help` —— 收不到时请改打 `/commands`。)\n" +
     "\n" +
     "【会话导航与回顾】\n" +
     "• `/sessions` — 列出最近会话(按修改时间)\n" +

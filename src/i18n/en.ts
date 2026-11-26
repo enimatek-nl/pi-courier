@@ -310,6 +310,7 @@ const en: Record<MessageKey, string> = {
     "• `/reload` — restart the pi process (after installing extensions / changing config); `/reload all` — restart every process of this instance (idle ones only, busy skipped)",
   "cmd.help.group.bridge":
     "**Bridge-only commands** (not in the pi TUI; implemented by this project):\n" +
+    "(Element Web swallows `/help` in its composer — type `/commands` if `/help` never arrives.)\n" +
     "\n" +
     "【Session navigation & recap】\n" +
     "• `/sessions` — list recent sessions (by modification time)\n" +

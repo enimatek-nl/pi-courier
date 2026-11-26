@@ -790,6 +790,32 @@ describe("message-router authorization pipeline (real ChallengeAuth)", () => {
   const eveMsg = (content: string, overrides: Partial<ExternalMessage> & { text?: string; quoted?: { username: string; excerpt: string } } = {}): ExternalMessage =>
     makeMsg({ userId: "@eve:server", username: "eve", text: content, ...overrides });
 
+  // Element Web swallows `/help` in its composer, so the listing must be
+  // reachable by a name the client does not own.
+  // Element Web swallows `/help` in its composer, so the listing must be
+  // reachable by names the client does not own.
+  it.each(["/help", "/commands", "/pi-help"])("%s answers with the command listing", async (name) => {
+    const fx = makeFixtures();
+    await fx
+      .makeRouter()
+      .handleIncoming(makeMsg({ chatId: "!dm:server", text: name }));
+    const last = fx.replies.at(-1);
+    expect(last?.text).toContain("/reload");
+    expect(last?.text).toContain("/commands");
+    // A listing is not a prompt: the command text must never reach the model.
+    expect(fx.rpc.prompt).not.toHaveBeenCalled();
+  });
+
+  it("does not treat the listing names as admin commands in a DM", async () => {
+    const fx = makeFixtures();
+    await fx
+      .makeRouter()
+      .handleIncoming(makeMsg({ chatId: "!dm:server", text: "/commands" }));
+    // Locale-independent: the listing always carries these command names.
+    expect(fx.replies.at(-1)?.text).toContain("/reload");
+    expect(fx.replies.at(-1)?.text).toContain("/commands");
+  });
+
   // The key written must be the one events carry: an alias key never matches an
   // exact room-id lookup, so enabling by alias used to look like success and do
   // nothing.
