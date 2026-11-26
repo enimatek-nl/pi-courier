@@ -534,6 +534,7 @@ const en: Record<MessageKey, string> = {
     "• `/multiproject on|off` — multi-project mode toggle (restart to apply)\n" +
     "• `/pmctl new <name> <path>` — create a project\n" +
     "• `/pmctl list` — project list\n" +
+    "• `/pmctl bind <#alias|room ID> <path>` — give that channel its own pi process in <path>; `/pmctl guard <room> on` jails it there (admin room)\n" +
     "• `/pmctl show|rm|mv|rename` — project details / delete / move / rename (rm needs a second confirmation; after confirming, the process stops and the bot leaves the room)\n" +
     "\n" +
     "**Pairing**: DM the bot for the first time → a 6-digit code appears in the bot's terminal and the management room → enter it in the chat where you received the prompt to become a trusted user (the first trusted user = admin). Group chats are enabled by a trusted user sending `/enable <mode>` in the group.",
@@ -591,6 +592,7 @@ const en: Record<MessageKey, string> = {
     "📁 **Project management** (this room only)\n" +
     "• `/pmctl new <name> [path]` — create a project (creates a private room and invites you)\n" +
     "• `/pmctl list` — project list\n" +
+    "• `/pmctl bind <#alias|room ID> <path>` — give that channel its own pi process in <path>; `/pmctl guard <room> on` jails it there (admin room)\n" +
     "• `/pmctl show|rm|mv|rename` — project details / delete / move / rename\n\n" +
     "⚡ **Common commands**\n" +
     "• `/stop` — stop the current task\n" +
@@ -662,7 +664,9 @@ const en: Record<MessageKey, string> = {
   "pmctl.statusLazy": "⏸️ not started (lazy)",
   "pmctl.list": "**Project list** ({count}):\n{lines}",
   "pmctl.show.usage": "Usage: /pmctl show <project name|room ID>",
-  "pmctl.notFound": "❌ Project not found: {target} (use /pmctl list)",
+  "pmctl.listGuarded": "🔒 jailed",
+  "pmctl.rm.guarded": "❌ {name} is jailed in {workdir} — /pmctl rm would drop the record and leave that directory guarded by nobody.\nUse /pmctl guard {name} off first, then /pmctl unbind to release the room and keep the directory named.",
+"pmctl.notFound": "❌ Project not found: {target} (use /pmctl list)",
   "pmctl.show.ok":
     "📁 Project: {name}\n• room: {room}\n• workdir: {workdir}\n• status: {status}\n• session: {session}\n• presets: {presets}",
   "pmctl.show.noPresets": "none (follows the global defaults)",
@@ -678,6 +682,23 @@ const en: Record<MessageKey, string> = {
   "pmctl.rm.confirm":
     "⚠️ Delete project \"{name}\"?\n\nSend `/pmctl rm {name}` again to confirm.\nOnce confirmed, I stop the process and leave that room.\n(send `/pmctl rm cancel` to cancel)",
   "pmctl.mv.usage": "Usage: /pmctl mv <project name|room ID> <new path> (relative paths resolve against the project root)",
+  "pmctl.bind.usage": "Usage: /pmctl bind <#alias|room ID> <path> — give that room its own pi process, rooted at <path>. Relative paths resolve against the project root.",
+  "pmctl.bind.done": "✅ Bound {roomId}\n• working directory: {workdir}\n• path guard: {guard}",
+  "pmctl.bind.moved": "✅ Re-bound {roomId} to {workdir}\n• the running instance is stopped; the next message starts in the new directory\n• path guard: {guard}",
+  "pmctl.bind.guardOn": "ON — tool calls reaching outside the directory are refused",
+  "pmctl.bind.guardOff": "off (directory only — a separate cwd is not confinement)",
+  "pmctl.bind.guarded": "❌ {workdir} is already guarded{name} — one directory can be a jail for one room only. Point this one at a subdirectory, or /pmctl guard it off first.",
+  "pmctl.bind.unknownRoom": "❌ No room found for {target} — pass a room id (!…), an alias (#…) the homeserver can resolve, or a bound project name.",
+  "pmctl.bind.notAbsolute": "❌ A jail root must be an absolute path: {path}",
+  "pmctl.bind.missing": "❌ That directory does not exist yet: {path}\nCreate it first — a jail is set on a directory you meant, not typed into being by mistake.",
+  "pmctl.bind.tooBroad": "❌ Refusing to jail {path}: a root that broad contains everything, which is the same as jailing nothing.",
+  "pmctl.bind.credentials": "❌ Refusing to jail {path}: it covers your {what} directory, so it protects nothing worth naming.",
+  "pmctl.bind.containsBridge": "❌ Refusing to jail {path}: it contains the bridge itself ({bridge}), which would let a jailed session edit the bridge, its config and its keys.",
+  "pmctl.unbind.usage": "Usage: /pmctl unbind <#alias|room ID|project name> (the directory and its files are left alone)",
+  "pmctl.unbind.done": "✅ Released {name} — its own process is stopped, the room is back on the default instance\n• directory left untouched: {workdir}",
+  "pmctl.guard.usage": "Usage: /pmctl guard <#alias|room ID|project name> <on|off>",
+  "pmctl.guard.on": "🔒 {name} is jailed in {workdir}\n• the instance is restarted; from the next message on, tool calls reaching outside are refused\n• it is the path guard that refuses them, not the working directory",
+  "pmctl.guard.off": "🔓 {name} is no longer jailed (it keeps its own instance in {workdir})",
   "pmctl.pathEscape": "❌ Path escapes the project root: {path}\nUse a name inside the project root; for a location elsewhere, pass an absolute path or one starting with ~/",
   "pmctl.mv.done":
     "🚚 Project \"{name}\" moved\n• new workdir: {workdir}\n• the session restarts (the old session stays in the old directory's {sessionDir})",

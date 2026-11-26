@@ -76,8 +76,9 @@ export async function handlePmctlFamily(
   deps: { pmctl: PmctlController; auth: ChallengeAuth; audit: CommandAudit; reply: CommandReply },
   ctx: {
     text: string;
-    msg: { userId: string; transport: string; chatId: string };
+    msg: { userId: string; transport: string; chatId: string; isGroupChat: boolean };
     isManagementRoom: boolean;
+    multiProject: boolean;
   },
 ): Promise<boolean> {
   // 审计(issue #124):项目删除是最重的一刀,确认链的每一步都留痕
@@ -93,6 +94,10 @@ export async function handlePmctlFamily(
       chatId: ctx.msg.chatId,
       senderMxid: ctx.msg.userId,
       isManagementRoom: ctx.isManagementRoom,
+      // Admin room in either mode (same reading as /update): single-project
+      // mode has no management room, so the admin's DM is one — which is where
+      // /pmctl bind has to be reachable from (docs/specs/channel-jail.md).
+      adminRoom: ctx.multiProject ? ctx.isManagementRoom : !ctx.msg.isGroupChat,
       isAdmin: deps.auth.isAdminUser(ctx.msg.userId, ctx.msg.transport),
     },
     async (replyText) => deps.reply(ctx.msg.chatId, ctx.msg.transport, replyText),

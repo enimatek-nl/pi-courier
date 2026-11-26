@@ -117,6 +117,18 @@ describe('config', () => {
     expect(stats.mode & 0o777).toBe(0o600);
   });
 
+  // A jail that does not survive a restart is not a jail: the flag has to ride
+  // the config file like any other binding field (docs/specs/channel-jail.md).
+  it("keeps a guarded project binding across save and reload", async () => {
+    const { saveConfig } = await importConfig();
+    saveConfig({
+      projects: { "!room:server": { name: "jail", workdir: "/srv/jail/room", guard: true } }
+    });
+    process.env.PI_COURIER_CONFIG_DIR = expectedConfigDir(tmpDir);
+    const cfg = (await importConfig()).loadConfig();
+    expect(cfg.projects?.["!room:server"]).toMatchObject({ workdir: "/srv/jail/room", guard: true });
+  });
+
   it.skipIf(process.platform === "win32")('tightens a pre-existing loose config file to 600 (audit batch 1 票8)', async () => {
     mkdirSync(expectedConfigDir(tmpDir), { recursive: true });
     const configPath = join(expectedConfigDir(tmpDir), 'pi-courier.json');

@@ -45,6 +45,12 @@ describe("PmctlController", () => {
       isRunning: vi.fn().mockReturnValue(false),
       removeProject: vi.fn(),
       updateProjectWorkdir: vi.fn(),
+      setProjectGuard: vi.fn().mockImplementation((roomId: string, guard: boolean) => {
+        const e = projects.get(roomId);
+        if (!e) return;
+        if (guard) e.guard = true;
+        else delete e.guard;
+      }),
       renameProject: vi.fn(),
       stopAll: vi.fn(),
       sessionDirFor: vi.fn().mockImplementation((roomId: string) => {
@@ -78,6 +84,11 @@ describe("PmctlController", () => {
       getPowerLevels: vi.fn().mockResolvedValue(undefined),
       leaveRoom: vi.fn().mockResolvedValue(undefined),
       getBotUserId: vi.fn().mockReturnValue("@bot:server"),
+      // An operator pastes whatever the client shows them; binding stores the id
+      // an incoming event actually carries.
+      resolveRoomId: vi.fn(async (roomOrAlias: string) =>
+        roomOrAlias.startsWith("#") ? "!resolved:server" : roomOrAlias
+      ),
     };
     // instanceName is pinned so room-name assertions ("myapp(debian)") don't
     // depend on the machine's hostname (effectiveInstanceName falls back to
@@ -1092,5 +1103,142 @@ describe("PmctlController share & wt (spec #299 票09)", () => {
     expect(r2.at(-1)).toContain("worktree 创建失败");
   });
 });
+
+
+  // ---- binding a channel to a directory (docs/specs/channel-jail.md) --------
+
+  // The headline rule: jailing one channel must not ask the operator to switch
+  // the whole bridge into multi-project mode, so the binding verbs survive
+  // single-project mode — from the admin's DM, which is the admin room there.
+  it("binds a channel in single-project mode from the admin DM", async () => {
+    pm.isMultiProject = false;
+    const jail = mkdtempSync(join(tmpDir, "jail-"));
+    await handle("/pmctl bind !room:server " + jail, { isManagementRoom: false, adminRoom: true });
+    expect(pm.registerProject).toHaveBeenCalledWith("!room:server", resolve(jail), expect.any(String));
+    expect(replies.at(-1)).toContain("路径护栏: 未开");
+    expect(replies.at(-1)).toContain("独立 cwd 本身不是隔离");
+  });
+
+  // Same command from a room nobody owns is still refused: the gate moved, it
+  // did not widen.
+  it("refuses to bind outside the admin room", async () => {
+    await handle("/pmctl bind !room:server /tmp", { isManagementRoom: false, adminRoom: false });
+    expect(pm.registerProject).not.toHaveBeenCalled();
+    expect(replies.at(-1)).toContain("仅可在管理房间");
+  });
+
+  // Non-admins are refused by the same gate the rest of /pmctl has — binding a
+  // directory belongs to whoever owns the bridge, never to a channel member.
+  it("refuses to bind for a non-admin in the admin room", async () => {
+    await handle("/pmctl bind !room:server /tmp", { adminRoom: true, isAdmin: false });
+    expect(pm.registerProject).not.toHaveBeenCalled();
+  });
+
+  it("stores the resolved room id, never the alias that was typed", async () => {
+    const jail = mkdtempSync(join(tmpDir, "jail-"));
+    await handle(`/pmctl bind #smaltino:server ${jail}`);
+    expect(roomOps.resolveRoomId).toHaveBeenCalledWith("#smaltino:server");
+    expect(pm.registerProject).toHaveBeenCalledWith("!resolved:server", resolve(jail), expect.any(String));
+  });
+
+  // An alias nobody can resolve would be stored as a key no event ever carries
+  // — the silent-injury bug /enable has with aliases today.
+  it("refuses an alias that does not resolve and stores nothing", async () => {
+    (roomOps.resolveRoomId as ReturnType<typeof vi.fn>).mockResolvedValueOnce(null);
+    await handle("/pmctl bind #ghost:server " + tmpDir);
+    expect(pm.registerProject).not.toHaveBeenCalled();
+    expect(replies.at(-1)).toContain("找不到房间");
+  });
+
+  it("refuses a directory that does not exist", async () => {
+    await handle("/pmctl bind !room:server " + join(tmpDir, "not-here"));
+    expect(pm.registerProject).not.toHaveBeenCalled();
+    expect(replies.at(-1)).toContain("该目录还不存在");
+  });
+
+  // A jail containing the bridge is the bridge jailed inside itself: from there
+  // a session can edit the bridge, its config and its access token.
+  it("refuses a root that contains the bridge itself", async () => {
+    // The bridge's own tree is the store's workdir, so the case is built by
+    // moving that root into the sandbox: jail root = tmpDir, bridge = tmpDir/proj.
+    mkdirSync(join(tmpDir, "proj"), { recursive: true });
+    store.update({ workdir: join(tmpDir, "proj") });
+    await handle(`/pmctl bind !room:server ${tmpDir}`);
+    expect(pm.registerProject).not.toHaveBeenCalled();
+    expect(replies.at(-1)).toContain("包含了桥自身");
+  });
+
+  it("refuses the home folder as a root", async () => {
+    await handle(`/pmctl bind !room:server ${osHomedir()}`);
+    expect(pm.registerProject).not.toHaveBeenCalled();
+    expect(replies.at(-1)).toContain("范围大到");
+  });
+
+  it("resolves a relative path against the project root, like the rest of /pmctl", async () => {
+    mkdirSync(join(tmpDir, "somewhere"), { recursive: true });
+    store.update({ workdir: tmpDir });
+    await handle("/pmctl bind !room:server ./somewhere");
+    expect(pm.registerProject).toHaveBeenCalledWith("!room:server", join(tmpDir, "somewhere"), expect.any(String));
+  });
+
+  // One directory, one guarded room. Sharing stays allowed while nobody is
+  // guarded — that is what sibling rooms and worktrees are for.
+  it("refuses a second guarded room over one directory, allows sharing when unguarded", async () => {
+    const jail = mkdtempSync(join(tmpDir, "jail-"));
+    pm.registerProject("!other:server", resolve(jail), "shared");
+    await handle(`/pmctl bind !room:server ${jail}`);
+    expect(pm.registerProject).toHaveBeenCalledTimes(2);
+
+    pm.setProjectGuard("!other:server", true);
+    await handle(`/pmctl bind !second:server ${jail}`);
+    expect(pm.registerProject).toHaveBeenCalledTimes(2);
+    expect(replies.at(-1)).toContain("已被护栏占用");
+  });
+
+  it("guard on flips the flag on the binding and names the restart", async () => {
+    const jail = mkdtempSync(join(tmpDir, "jail-"));
+    pm.registerProject("!room:server", resolve(jail), "proj");
+    await handle("/pmctl guard !room:server on");
+    expect(pm.setProjectGuard).toHaveBeenCalledWith("!room:server", true);
+    expect(replies.at(-1)).toContain("已 jail 在");
+    expect(replies.at(-1)).toContain("路径护栏");
+  });
+
+  it("guard off is always allowed and keeps the instance", async () => {
+    pm.registerProject("!room:server", "/somewhere/outside/any/rules", "proj");
+    await handle("/pmctl guard !room:server off");
+    expect(pm.setProjectGuard).toHaveBeenCalledWith("!room:server", false);
+    expect(replies.at(-1)).toContain("已解除 jail");
+  });
+
+  it("unbind releases the room and names the directory it left alone", async () => {
+    const jail = mkdtempSync(join(tmpDir, "jail-"));
+    pm.registerProject("!room:server", resolve(jail), "proj");
+    await handle("/pmctl unbind !room:server");
+    expect(pm.removeProject).toHaveBeenCalledWith("!room:server");
+    expect(replies.at(-1)).toContain(resolve(jail));
+  });
+
+
+  // Dropping a guarded binding's record would leave the directory on disk with
+  // no guard configured anywhere — an orphan jail is worse than none, because
+  // it looks like one.
+  it("refuses /pmctl rm on a guarded project and points at unbind", async () => {
+    const jail = mkdtempSync(join(tmpDir, "jail-"));
+    pm.registerProject("!room:server", resolve(jail), "proj");
+    pm.setProjectGuard("!room:server", true);
+    await handle("/pmctl rm proj");
+    expect(pm.removeProject).not.toHaveBeenCalled();
+    expect(replies.at(-1)).toContain("guard");
+  });
+
+  it("marks a jailed project in /pmctl list", async () => {
+    const jail = mkdtempSync(join(tmpDir, "jail-"));
+    pm.registerProject("!room:server", resolve(jail), "proj");
+    pm.setProjectGuard("!room:server", true);
+    await handle("/pmctl list");
+    expect(replies.at(-1)).toContain("已 jail");
+    expect(replies.at(-1)).toContain(resolve(jail));
+  });
 
 });

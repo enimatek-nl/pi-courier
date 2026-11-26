@@ -232,6 +232,19 @@ export class MatrixRoomOps implements RoomOps {
     }
   }
 
+  /** `#alias:server` → `!opaque:server`; an id is returned as given. Null when
+   *  the alias does not resolve (unknown alias, no permission, server error) —
+   *  the caller decides what a missing room means. */
+  async resolveRoomId(roomOrAlias: string): Promise<string | null> {
+    if (!roomOrAlias.startsWith("#")) return roomOrAlias;
+    try {
+      const resolved = await this.client.resolveRoom(roomOrAlias);
+      return typeof resolved === "string" && resolved.startsWith("!") ? resolved : null;
+    } catch {
+      return null;
+    }
+  }
+
   /** 票02(spec #299):登记一个 bot 身份进房间 —— 每 bot 一条状态事件,
    *  state_key = 其 MXID,内容带写入方署名;同 MXID 幂等覆盖,无写冲突。 */
   async registerRoomBot(roomId: string, botUserId: string): Promise<void> {

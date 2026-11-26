@@ -1215,7 +1215,7 @@ export function createMessageRouter(deps: MessageRouterDeps): MessageRouter {
       handle: async (ctx) =>
         await handlePmctlFamily(
           { pmctl, auth, audit: auditTrail, reply: sendReply },
-          { text: ctx.text, msg: ctx.msg, isManagementRoom: ctx.isManagementRoom },
+          { text: ctx.text, msg: ctx.msg, isManagementRoom: ctx.isManagementRoom, multiProject: ctx.multiProject },
         ),
     },
     {

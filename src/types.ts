@@ -383,6 +383,15 @@ export interface ProjectConfig {
   /** 房间绑定模式(spec #299 票04):guest = 经认领流绑定(客座,仅 @触发
    *  —— 触发面在票05 落地);缺省 = owner(自建,行为与 1.6.x 一致)。 */
   mode?: "owner" | "guest";
+  /**
+   * Path guard on this room's own pi instance (docs/specs/channel-jail.md).
+   * true = the instance loads the guard extension with this workdir as its
+   * root, so tool calls reaching outside are refused, AND the workdir belongs
+   * to this room alone: no second guarded room may bind the same directory.
+   * Absent/false = an ordinary project binding (shared directories allowed,
+   * no guard). Setting it restarts the instance — the root is fixed at spawn.
+   */
+  guard?: boolean;
   /** 房间级工具流三态(spec #299 票06):auto=按房间类型(owner 开、guest
    *  关)/ on|off=强制覆盖;缺省 auto。/toggletools <auto|on|off> 在项目房内切换。 */
   showToolCalls?: "auto" | "on" | "off";

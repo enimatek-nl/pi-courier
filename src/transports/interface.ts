@@ -66,6 +66,11 @@ export interface RoomOps {
    *  Optional: only the Matrix adapter has rooms with members. Used by the
    *  outgoing handle matcher (docs/specs/mention-handles.md). */
   listRoomMembers?(roomId: string): Promise<string[]>;
+  /** Resolve `#alias:server` to `!opaque:server` (an id passes through). Query
+   *  member: reports null when the alias is unknown or the server could not be
+   *  asked — callers must then say so rather than store a key no event carries.
+   *  Optional: only Matrix addresses rooms by alias. */
+  resolveRoomId?(roomOrAlias: string): Promise<string | null>;
   /** Read a room's power-level state (m.room.power_levels content), or null
    *  when the room has no (visible) such state — 404 / M_NOT_FOUND. Like the
    *  other query members this reports absence instead of throwing; the

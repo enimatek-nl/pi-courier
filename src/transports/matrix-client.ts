@@ -78,6 +78,12 @@ export interface MatrixClientPort {
    *  (spec #299 票02)按自定义类型过滤 state_key 用,不做逐 key 探测;
    *  sender 用于登记簿读侧来源校验(任务2 审计整改)。 */
   getRoomState(roomId: string): Promise<Array<{ type: string; state_key: string; sender?: string; content: any }>>;
+  /** Resolve a room alias (#room:server) to its room id (!opaque:server); an
+   *  id passes through. Query member: an alias that does not resolve reports
+   *  null instead of throwing. Used by admin commands that take a room
+   *  argument, so a stored key is always the id an incoming event carries
+   *  (docs/specs/channel-jail.md). */
+  resolveRoom(roomIdOrAlias: string): Promise<string>;
 
   // ── 出站 ──
   sendMessage(roomId: string, content: MatrixMessageContent): Promise<string>;

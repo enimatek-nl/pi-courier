@@ -124,9 +124,12 @@ export class ProjectManager {
    * - Multi-project: mapped project room -> project process; else default.
    */
   async getRpcForRoom(roomId: string): Promise<PiRpc> {
-    if (!this.multiProject) return this.defaultRpc;
     const entry = this.projectMap()[roomId];
-    if (entry) {
+    // A guarded binding is authoritative in every mode. The path guard lives in
+    // the child process, so a jailed room sharing an instance with anybody else
+    // would run that room's tools under the wrong root — the one combination
+    // that looks configured and is not confined (docs/specs/channel-jail.md).
+    if (entry && (this.multiProject || entry.guard)) {
       return this.getProjectRpc(roomId, entry);
     }
     return this.defaultRpc;
@@ -136,9 +139,9 @@ export class ProjectManager {
    *  undefined when the room is not a mapped project / single-project mode.
    *  The same projectLabelOf rule the CLI filter matches against (spec #34). */
   labelForRoom(roomId: string): string | undefined {
-    if (!this.multiProject) return undefined;
     const entry = this.projectMap()[roomId];
-    return entry ? projectLabelOf(entry) : undefined;
+    if (!entry) return undefined;
+    return this.multiProject || entry.guard ? projectLabelOf(entry) : undefined;
   }
 
   /** Whether this room is a mapped project room (only meaningful in multi-project). */
@@ -334,6 +337,35 @@ export class ProjectManager {
   }
 
   /** Update a project's workdir (used by /pmctl mv). */
+  /** Turn the path guard on or off for a bound room (docs/specs/channel-jail.md).
+   *
+   *  The guard is decided at spawn — an extension plus an environment variable on
+   *  the child process — so switching it always costs the running instance: it is
+   *  stopped here and takes the new shape on the next message, exactly like
+   *  /pmctl mv changing the workdir. */
+  async setProjectGuard(roomId: string, guard: boolean): Promise<void> {
+    const entry = this.projectMap()[roomId];
+    if (!entry) return;
+    this.updateProjects((projects) => {
+      const next = { ...projects[roomId] };
+      if (guard) next.guard = true;
+      else delete next.guard;
+      projects[roomId] = next;
+    });
+    const running = this.projectRpcs.get(roomId);
+    if (running) {
+      logger
+        .withLabel(running.label)
+        .info(
+          `🛑 project pi process stopped (/pmctl guard ${guard ? "on" : "off"}; next message starts ${
+            guard ? "guarded in" : "unguarded in"
+          } ${entry.workdir})`
+        );
+      await this.stopWithWarn(running);
+      this.projectRpcs.delete(roomId);
+    }
+  }
+
   async updateProjectWorkdir(roomId: string, workdir: string): Promise<void> {
     const entry = this.projectMap()[roomId];
     if (!entry) return;

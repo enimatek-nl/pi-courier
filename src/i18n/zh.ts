@@ -517,6 +517,7 @@ const zh = {
     "• `/multiproject on|off` — 多工程模式开关(重启生效)\n" +
     "• `/pmctl new <名称> <路径>` — 创建项目\n" +
     "• `/pmctl list` — 项目列表\n" +
+    "• `/pmctl bind <#别名|房间ID> <路径>` — 为该房开自己的 pi 进程;`/pmctl guard <房> on` 把它 jail 在该目录(管理房)\n" +
     "• `/pmctl show|rm|mv|rename` — 项目详情/删除/迁移/重命名(rm 需二次确认,确认后停止进程并退出房间)\n" +
     "\n" +
     "**认证**: 首次私聊 bot → bot 终端与管理房间会显示 6 位验证码 → 在收到提示的那个聊天里输入验证码即成为信任用户(第一个信任用户 = 管理员)。群聊由信任用户在群里发 `/enable <模式>` 启用。",
@@ -569,6 +570,7 @@ const zh = {
     "📁 **项目管理**(仅本房间可用)\n" +
     "• `/pmctl new <名称> [路径]` — 创建项目(自动建私有房间并拉你进入)\n" +
     "• `/pmctl list` — 项目列表\n" +
+    "• `/pmctl bind <#别名|房间ID> <路径>` — 为该房开自己的 pi 进程;`/pmctl guard <房> on` 把它 jail 在该目录(管理房)\n" +
     "• `/pmctl show|rm|mv|rename` — 项目详情/删除/迁移/重命名\n\n" +
     "⚡ **常用命令**\n" +
     "• `/stop` — 停止当前任务\n" +
@@ -631,7 +633,9 @@ const zh = {
   "pmctl.statusLazy": "⏸️ 未启动(lazy)",
   "pmctl.list": "**项目列表** ({count}):\n{lines}",
   "pmctl.show.usage": "用法: /pmctl show <项目名|房间ID>",
-  "pmctl.notFound": "❌ 未找到项目: {target}(用 /pmctl list 查看)",
+  "pmctl.listGuarded": "🔒 已 jail",
+  "pmctl.rm.guarded": "❌ {name} 已 jail 在 {workdir} —— /pmctl rm 只会删掉记录,把那个目录留成没人护栏的孤儿。\n先 /pmctl guard {name} off,再用 /pmctl unbind 释放该房(回执会写明目录位置)。",
+"pmctl.notFound": "❌ 未找到项目: {target}(用 /pmctl list 查看)",
   "pmctl.show.ok": "📁 项目: {name}\n• 房间: {room}\n• 工作目录: {workdir}\n• 状态: {status}\n• 会话: {session}\n• 预设: {presets}",
   "pmctl.show.noPresets": "未配置(跟随全局默认)",
   "pmctl.rm.usage": "用法: /pmctl rm <项目名|房间ID>",
@@ -644,6 +648,23 @@ const zh = {
   "pmctl.leaveReason": "项目已删除",
   "pmctl.rm.confirm": "⚠️ 确认删除项目「{name}」?\n\n再次发送 `/pmctl rm {name}` 确认删除。\n确认后我会停止进程并主动退出该房间。\n(发送 `/pmctl rm cancel` 取消)",
   "pmctl.mv.usage": "用法: /pmctl mv <项目名|房间ID> <新路径>(相对路径基于工程根)",
+  "pmctl.bind.usage": "用法: /pmctl bind <#别名|房间ID> <路径> —— 为该房开一个自己的 pi 进程,工作目录 = <路径>。相对路径基于工程根。",
+  "pmctl.bind.done": "✅ 已绑定 {roomId}\n• 工作目录: {workdir}\n• 路径护栏: {guard}",
+  "pmctl.bind.moved": "✅ 已把 {roomId} 改绑到 {workdir}\n• 正在跑的进程已停;下一条消息在新目录开始\n• 路径护栏: {guard}",
+  "pmctl.bind.guardOn": "已开 —— 伸出该目录的工具调用会被拒绝",
+  "pmctl.bind.guardOff": "未开(只限定了目录 —— 独立 cwd 本身不是隔离)",
+  "pmctl.bind.guarded": "❌ {workdir} 已被护栏占用{name} —— 一个目录只能当一个房的 jail。请改指到子目录,或先 /pmctl guard 关掉那边。",
+  "pmctl.bind.unknownRoom": "❌ 找不到房间 {target} —— 请给房间 ID(!…)、服务器能解析的别名(#…),或已绑定的项目名。",
+  "pmctl.bind.notAbsolute": "❌ jail 根目录必须是绝对路径: {path}",
+  "pmctl.bind.missing": "❌ 该目录还不存在: {path}\n请先自己建好 —— jail 应该套在你有意的目录上,而不是打错字打出来的。",
+  "pmctl.bind.tooBroad": "❌ 拒绝把 {path} 设为 jail:范围大到包含一切,等于没有隔离。",
+  "pmctl.bind.credentials": "❌ 拒绝把 {path} 设为 jail:它包含了你的 {what} 目录,拦不住任何值得提的东西。",
+  "pmctl.bind.containsBridge": "❌ 拒绝把 {path} 设为 jail:它包含了桥自身({bridge}),那样被隔离的会话就能改桥、改配置、拿密钥。",
+  "pmctl.unbind.usage": "用法: /pmctl unbind <#别名|房间ID|项目名>(目录与其中文件不动)",
+  "pmctl.unbind.done": "✅ 已释放 {name} —— 自己的进程已停,该房回到默认进程\n• 目录保持原样: {workdir}",
+  "pmctl.guard.usage": "用法: /pmctl guard <#别名|房间ID|项目名> <on|off>",
+  "pmctl.guard.on": "🔒 {name} 已 jail 在 {workdir}\n• 进程已重启;从下一条消息起,伸出该目录的工具调用会被拒绝\n• 拒绝来自路径护栏,不是因为工作目录在那里",
+  "pmctl.guard.off": "🔓 {name} 已解除 jail(仍在 {workdir} 保留自己的进程)",
   "pmctl.pathEscape": "❌ 路径逃出工程根:{path}\n请用工程根内的名字;确实要指到别处,请给绝对路径或以 ~/ 开头的路径",
   "pmctl.mv.done": "🚚 项目「{name}」已迁移\n• 新工作目录: {workdir}\n• 会话将重新开始(旧会话保留在旧目录 {sessionDir})",
   "pmctl.rename.usage": "用法: /pmctl rename <项目名|房间ID> <新名称>",

@@ -54,6 +54,10 @@ export interface PmctlCall {
   senderMxid: string;
   /** Whether this room is the management room. */
   isManagementRoom: boolean;
+  /** Admin room in either mode: the management room in multi-project mode, the
+   *  admin's DM in single-project mode (where there is no management room).
+   *  Binding verbs accept it; the rest of /pmctl still wants isManagementRoom. */
+  adminRoom?: boolean;
   /** 工单 sec-pmctl-admin-gate:发送者是否 admin(auth.isAdminUser 的判定
    *  结果,由调用方按消息算好传入 —— 控制器不持有 auth 依赖)。必填:
    *  漏传是类型错误而不是静默放行,与 /login /mcp 同一授权面。 */
@@ -103,6 +107,21 @@ function splitFirst(s: string): [string, string] {
   return sp === -1 ? [s.trim(), ""] : [s.slice(0, sp).trim(), s.slice(sp + 1).trim()];
 }
 
+/** Whether two paths name the same directory on this host. Comparison follows
+ *  the platform's case sensitivity (paths are case-sensitive on Linux, not on
+ *  Windows), after resolving separators and trailing slashes. */
+function sameWorkdir(a: string, b: string): boolean {
+  const na = path.resolve(a).replace(/[/\\]+$/, "");
+  const nb = path.resolve(b).replace(/[/\\]+$/, "");
+  return process.platform === "win32" ? na.toLowerCase() === nb.toLowerCase() : na === nb;
+}
+
+/** Whether `child` is `root` itself or sits below it. */
+function inside(child: string, root: string): boolean {
+  const rel = path.relative(path.resolve(root), path.resolve(child));
+  return rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel));
+}
+
 /** 票 #210:急启动后的会话状态里的当前模型 → `provider/id` 单引用。
  *  客户端未就绪(requireClient/getState 抛)或状态缺字段 → undefined,
  *  欢迎卡省模型行照发 —— 卡片不该被一行模型信息卡住。 */
@@ -144,31 +163,10 @@ export class PmctlController {
 
     const projectManager = this.opts.projectManager;
 
-    // In single-project mode /pmctl is not available.
-    if (projectManager.isMultiProject === false) {
-      await reply(t("pmctl.singleProjectMode"));
-      return true;
-    }
-    // Management commands are only available in the management room
-    // (the first paired DM). Project rooms are for conversation only.
-    if (!call.isManagementRoom) {
-      await reply(t("pmctl.managementRoomOnly"));
-      return true;
-    }
-    // 工单 sec-pmctl-admin-gate:第四道门 —— 与同房间 /login /mcp 对齐的
-    // admin 授权面。缺了它,space 模式下配对成功的非 admin trusted 用户被
-    // 邀入管理房后即可 /pmctl rm(停进程/删映射/退房)/mv/rename。排在管理
-    // 房门之后:管理房外的请求照旧回房间限制,不向非 admin 泄露授权状态。
-    if (!call.isAdmin) {
-      await reply(t("pmctl.adminOnly"));
-      return true;
-    }
-    const { roomOps } = this.opts;
-    if (!roomOps) {
-      await reply(t("pmctl.matrixOnly"));
-      return true;
-    }
-
+    // Which verb was asked for decides which gates apply, so parsing runs first:
+    // the binding commands work in single-project mode too, because jailing one
+    // channel does not ask the operator to switch the whole bridge into
+    // multi-project mode just to own one room's directory.
     const spaceIndex = trimmed.indexOf(" ");
     const args = spaceIndex === -1 ? "" : trimmed.slice(spaceIndex + 1).trim();
 
@@ -183,6 +181,35 @@ export class PmctlController {
     } else {
       [op, rest] = splitFirst(args);
       if (!op) op = "list";
+    }
+    const binding = op === "bind" || op === "unbind" || op === "guard";
+
+    // In single-project mode the rest of /pmctl is not available.
+    if (projectManager.isMultiProject === false && !binding) {
+      await reply(t("pmctl.singleProjectMode"));
+      return true;
+    }
+    // Management commands are only available in the management room
+    // (the first paired DM). Project rooms are for conversation only. For the
+    // binding verbs the admin room of either mode counts, since a jail is set
+    // from wherever the admin talks to the bridge — a DM in single-project mode
+    // (the same reading /update uses).
+    if (!call.isManagementRoom && !(binding && call.adminRoom)) {
+      await reply(t("pmctl.managementRoomOnly"));
+      return true;
+    }
+    // 工单 sec-pmctl-admin-gate：第四道门 —— 与同房间 /login /mcp 对齐的
+    // admin 授权面。缺了它,space 模式下配对成功的非 admin trusted 用户被
+    // 邀入管理房后即可 /pmctl rm（停进程/删映射/退房）/mv/rename。排在管理
+    // 房门之后：管理房外的请求照旧回房间限制,不向非 admin 泄露授权状态。
+    if (!call.isAdmin) {
+      await reply(t("pmctl.adminOnly"));
+      return true;
+    }
+    const { roomOps } = this.opts;
+    if (!roomOps) {
+      await reply(t("pmctl.matrixOnly"));
+      return true;
     }
 
     switch (op) {
@@ -212,6 +239,15 @@ export class PmctlController {
         return true;
       case "wt":
         await this.wt(rest, call, reply, roomOps);
+        return true;
+      case "bind":
+        await this.bind(rest, reply, roomOps);
+        return true;
+      case "unbind":
+        await this.unbind(rest, reply);
+        return true;
+      case "guard":
+        await this.guard(rest, reply);
         return true;
       default:
         await reply(t("pmctl.unknownOp", { op }));
@@ -413,7 +449,11 @@ export class PmctlController {
     }
     const lines = projects.map(([roomId, p]) => {
       const status = pm.isRunning(roomId) ? t("pmctl.statusRunning") : t("pmctl.statusStopped");
-      return `• ${projectLabelOf(p)} — ${status}\n  ${p.workdir} (${roomId})`;
+      // The jail marker belongs on the same line as the directory it covers:
+      // "own instance" and "confined to it" are different facts, and a list
+      // that hides the difference invites exactly that mistake.
+      const jail = p.guard ? ` ${t("pmctl.listGuarded")}` : "";
+      return `• ${projectLabelOf(p)} — ${status}${jail}\n  ${p.workdir} (${roomId})`;
     });
     return t("pmctl.list", { count: projects.length, lines: lines.join("\n") });
   }
@@ -475,6 +515,16 @@ export class PmctlController {
       await reply(had ? t("pmctl.rm.cancelled") : t("pmctl.rm.nothingPending"));
       return;
     }
+    // A guarded binding's directory outlives the record: /pmctl rm would drop
+    // the mapping, stop the instance and leave a jail nobody owns any more —
+    // files still on disk, guard still configured nowhere. /pmctl unbind says
+    // the same thing out loud and leaves the directory named in the reply.
+    const guarded = this.findProject(target.trim());
+    if (guarded?.[1].guard) {
+      this.pendingRm.delete(call.chatId);
+      await reply(t("pmctl.rm.guarded", { name: projectLabelOf(guarded[1]), workdir: guarded[1].workdir }));
+      return;
+    }
     const found = this.findProject(target);
     if (!found) {
       this.pendingRm.delete(call.chatId);
@@ -523,6 +573,167 @@ export class PmctlController {
     // First send: arm the confirmation only, never delete.
     this.pendingRm.set(call.chatId, { roomId, ts: Date.now() });
     await reply(t("pmctl.rm.confirm", { name: projectLabelOf(entry) }));
+  }
+
+  /**
+   * `/pmctl bind <chatId|#alias> <path>` — give a room the bridge did not create
+   * its own pi instance, rooted at <path> (docs/specs/channel-jail.md). The
+   * address accepts what an operator can copy out of a client, including an
+   * alias; what gets stored is always the room id, because that is the key every
+   * incoming event carries.
+   */
+  private async bind(rest: string, reply: Reply, roomOps: RoomOps): Promise<void> {
+    const [target, workdirArg] = splitFirst(rest);
+    if (!target || !workdirArg) {
+      await reply(t("pmctl.bind.usage"));
+      return;
+    }
+    const roomId = await this.resolveTargetRoom(target, roomOps, reply);
+    if (!roomId) return;
+
+    const workdir = this.resolveProjectPath(workdirArg);
+    if (workdir === null) {
+      await reply(t("pmctl.pathEscape", { path: workdirArg }));
+      return;
+    }
+    const problem = this.jailPathProblem(workdir);
+    if (problem) {
+      await reply(problem);
+      return;
+    }
+    // One directory, one guarded room. Ordinary (unguarded) bindings may share
+    // a checkout — that is what /pmctl wt and sibling rooms are for — but a
+    // guard whose root is also somebody else's working directory confines
+    // nothing, so it is refused instead.
+    const bindings = this.opts.projectManager.listProjects();
+    const existing = bindings.find(([id]) => id === roomId)?.[1];
+    const clash = bindings.find(([id, p]) => id !== roomId && sameWorkdir(p.workdir, workdir))?.[1];
+    // A room that is already guarded keeps its guard: re-binding it elsewhere
+    // must not smuggle the jail root onto a directory that was never checked.
+    if (clash?.guard || existing?.guard) {
+      await reply(t("pmctl.bind.guarded", { name: clash ? projectLabelOf(clash) : "", workdir }));
+      return;
+    }
+
+    const label = path.basename(workdir.replace(/[/\\]+$/, "")) || roomId;
+    if (existing) {
+      await this.opts.projectManager.updateProjectWorkdir(roomId, workdir);
+    } else {
+      this.opts.projectManager.registerProject(roomId, workdir, label);
+    }
+    const nowGuarded = this.opts.projectManager.listProjects().find(([id]) => id === roomId)?.[1]?.guard;
+    await reply(
+      t(existing ? "pmctl.bind.moved" : "pmctl.bind.done", {
+        roomId,
+        workdir,
+        guard: nowGuarded ? t("pmctl.bind.guardOn") : t("pmctl.bind.guardOff")
+      })
+    );
+  }
+
+  /** `/pmctl unbind <chatId|#alias>` — release a room's own instance. The
+   *  directory survives: unbinding is about the binding, never about files. */
+  private async unbind(rest: string, reply: Reply): Promise<void> {
+    const [target] = splitFirst(rest);
+    if (!target) {
+      await reply(t("pmctl.unbind.usage"));
+      return;
+    }
+    const found = this.findProject(target);
+    if (!found) {
+      await reply(t("pmctl.notFound", { target }));
+      return;
+    }
+    const [roomId, entry] = found;
+    await this.opts.projectManager.removeProject(roomId);
+    await reply(t("pmctl.unbind.done", { name: projectLabelOf(entry), workdir: entry.workdir }));
+  }
+
+  /** `/pmctl guard <chatId|#alias> <on|off>` — the jail switch on a binding.
+   *  Off is always allowed; on requires the directory rules, because a guard
+   *  rooted at a directory that contains the bridge, the home folder or a
+   *  credential store is a jail with the door wired open. */
+  private async guard(rest: string, reply: Reply): Promise<void> {
+    const [target, state] = splitFirst(rest);
+    if (!target || (state !== "on" && state !== "off")) {
+      await reply(t("pmctl.guard.usage"));
+      return;
+    }
+    const found = this.findProject(target);
+    if (!found) {
+      await reply(t("pmctl.notFound", { target }));
+      return;
+    }
+    const [roomId, entry] = found;
+    if (state === "on") {
+      const problem = this.jailPathProblem(entry.workdir);
+      if (problem) {
+        await reply(problem);
+        return;
+      }
+      const clash = this.opts.projectManager
+        .listProjects()
+        .find(([id, p]) => id !== roomId && p.guard && sameWorkdir(p.workdir, entry.workdir));
+      if (clash) {
+        await reply(t("pmctl.bind.guarded", { name: projectLabelOf(clash[1]), workdir: entry.workdir }));
+        return;
+      }
+    }
+    await this.opts.projectManager.setProjectGuard(roomId, state === "on");
+    await reply(
+      t(state === "on" ? "pmctl.guard.on" : "pmctl.guard.off", {
+        name: projectLabelOf(entry),
+        workdir: entry.workdir
+      })
+    );
+  }
+
+  /** Room id for a `#alias:server` / `!id:server` / project-label argument, or
+   *  null after replying. An alias that cannot be resolved is reported, never
+   *  stored: a binding keyed by an alias matches no incoming event, which is the
+   *  same silent-injury bug /enable has today with aliases. */
+  private async resolveTargetRoom(target: string, roomOps: RoomOps, reply: Reply): Promise<string | null> {
+    const found = this.findProject(target);
+    if (found) return found[0];
+    if (target.startsWith("!") || target.startsWith("#")) {
+      const resolved = roomOps.resolveRoomId ? await roomOps.resolveRoomId(target) : target.startsWith("!") ? target : null;
+      if (!resolved) {
+        await reply(t("pmctl.bind.unknownRoom", { target }));
+        return null;
+      }
+      return resolved;
+    }
+    await reply(t("pmctl.bind.unknownRoom", { target }));
+    return null;
+  }
+
+  /** Rules a directory must satisfy to be a jail root. Deliberately stricter
+   *  than resolveProjectPath: a jail whose root is an ancestor of the bridge is
+   *  the bridge jailed inside itself, and one over ~/.ssh or ~/.pi would protect
+   *  nothing worth naming. */
+  private jailPathProblem(workdir: string): string | null {
+    const home = os.homedir();
+    const bridgeRoot = path.resolve(this.opts.store.get().workdir ?? process.cwd());
+    // Danger first, existence last: a root that would jail the bridge or the
+    // credential folders is refused whether or not it happens to exist, so the
+    // answer never depends on what is on disk at the moment of typing.
+    if (!path.isAbsolute(workdir)) return t("pmctl.bind.notAbsolute", { path: workdir });
+    if (workdir === path.parse(workdir).root) return t("pmctl.bind.tooBroad", { path: workdir });
+    if (path.resolve(workdir) === path.resolve(home)) return t("pmctl.bind.tooBroad", { path: workdir });
+    for (const [sensitive, key] of [
+      [path.join(home, ".ssh"), "ssh"],
+      [path.join(home, ".pi"), "pi"]
+    ] as const) {
+      if (inside(workdir, sensitive) || inside(sensitive, workdir)) {
+        return t("pmctl.bind.credentials", { path: workdir, what: key });
+      }
+    }
+    // A root that *contains* the bridge's own directory lets the jailed session
+    // edit the bridge, its config and its access token. The opposite direction —
+    // a jail inside the bridge's tree — is fine and is where jails usually live.
+    if (inside(bridgeRoot, workdir)) return t("pmctl.bind.containsBridge", { path: workdir, bridge: bridgeRoot });
+    if (!existsSync(workdir)) return t("pmctl.bind.missing", { path: workdir });
+    return null;
   }
 
   private async mv(rest: string, reply: Reply): Promise<void> {

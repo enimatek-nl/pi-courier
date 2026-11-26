@@ -71,9 +71,40 @@ describe("ProjectManager.labelForRoom", () => {
     expect(pm.labelForRoom("!c:s")).toBeUndefined(); // unmapped
   });
 
-  it("is always undefined in single-project mode", () => {
+  it("is undefined in single-project mode — except for a guarded room", () => {
+    // A guard is per process, so a jailed room is never the shared instance,
+    // not even in single-project mode: the label follows the same rule as the
+    // routing below, or the logs would attribute its work to the default.
     const { pm } = makePM({ "!a:s": { name: "ai-api", workdir: "/w/x" } }, false);
     expect(pm.labelForRoom("!a:s")).toBeUndefined();
+    const guarded = makePM({ "!a:s": { name: "ai-api", workdir: "/w/x", guard: true } }, false);
+    expect(guarded.pm.labelForRoom("!a:s")).toBe("ai-api");
+  });
+});
+
+describe("ProjectManager.getRpcForRoom and the path guard", () => {
+  // docs/specs/channel-jail.md: the guard is an extension plus an environment
+  // variable on the child process, so a jailed room sharing an instance with
+  // anybody else would run its tools under the wrong root.
+  it("keeps an unguarded room on the shared instance in single-project mode", async () => {
+    const { pm, defaultRpc, rpcs } = makePM({ "!a:s": { workdir: "/w/a" } }, false);
+    expect(await pm.getRpcForRoom("!a:s")).toBe(defaultRpc);
+    expect(rpcs).toHaveLength(0);
+  });
+
+  it("gives a guarded room its own process in single-project mode, rooted at its directory", async () => {
+    const { pm, defaultRpc, rpcs, spawnOpts, store } = makePM({ "!a:s": { name: "jail", workdir: "/srv/jail/a" } }, false);
+    // The flag is set the way the product sets it (a write through the store),
+    // so the assertion covers the config layer too: a jail flag that does not
+    // survive the round-trip is a jail that quietly stops existing.
+    store.update({ projects: { "!a:s": { name: "jail", workdir: "/srv/jail/a", guard: true } } });
+    expect(pm.projectMap()["!a:s"]!.guard).toBe(true);
+    const rpc = await pm.getRpcForRoom("!a:s");
+    expect(rpc).not.toBe(defaultRpc);
+    expect(rpcs).toHaveLength(1);
+    expect(spawnOpts[0]?.cwd).toBe("/srv/jail/a");
+    // Other rooms keep the shared instance.
+    expect(await pm.getRpcForRoom("!other:s")).toBe(defaultRpc);
   });
 });
 
