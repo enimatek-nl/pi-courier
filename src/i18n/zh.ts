@@ -663,7 +663,7 @@ const zh = {
   "pmctl.unbind.usage": "用法: /pmctl unbind <#别名|房间ID|项目名>(目录与其中文件不动)",
   "pmctl.unbind.done": "✅ 已释放 {name} —— 自己的进程已停,该房回到默认进程\n• 目录保持原样: {workdir}",
   "pmctl.guard.usage": "用法: /pmctl guard <#别名|房间ID|项目名> <on|off>",
-  "pmctl.guard.on": "🔒 {name} 已 jail 在 {workdir}\n• 进程已重启;从下一条消息起,伸出该目录的工具调用会被拒绝\n• 拒绝来自路径护栏,不是因为工作目录在那里",
+  "pmctl.guard.on": "🔒 {name} 已 jail 在 {workdir}\n• 从下一条消息起,伸出该目录的工具调用会被拒绝(AGENTS.md:{instructions});拒绝来自路径护栏,不是因为工作目录在那里",
   "pmctl.guard.off": "🔓 {name} 已解除 jail(仍在 {workdir} 保留自己的进程)",
   "pmctl.pathEscape": "❌ 路径逃出工程根:{path}\n请用工程根内的名字;确实要指到别处,请给绝对路径或以 ~/ 开头的路径",
   "pmctl.mv.done": "🚚 项目「{name}」已迁移\n• 新工作目录: {workdir}\n• 会话将重新开始(旧会话保留在旧目录 {sessionDir})",

@@ -61,55 +61,72 @@ what `/pmctl wt` and sibling rooms are for.
 
 ## What is confined, and what is not
 
-Switching the guard on restarts the instance, and from the next message that process
-carries the guard. **The guard itself is the next change**, tracked here until it ships:
-an extension the jailed instance loads with `-e`, refusing `tool_call`s that reach
-outside its root — and, because the root must never disagree with the directory the
-operator bound, **the root is the instance's working directory**, read at extension
-load (see "Where the root comes from"). Until that lands, `guard on` is honest only about the
-instance and the directory, and says so out loud:
+Switching the guard on restarts the instance, and from the next message that
+process is confined: `ProjectManager` spawns a guarded binding with
+`-e <package>/jail/guard.js`, `--no-approve`, and a jail environment.
 
-> `• path guard: off (directory only — a separate cwd is not confinement)`
+| Piece | Value | Why exactly this |
+|---|---|---|
+| Extension | `-e …/dist/jail/guard.js` | Loaded from the *package*, never from the jailed directory — configuration the confined party can write is not configuration. |
+| Project resources | `--no-approve` | pi reads `.pi/extensions/` and `.pi/skills/` from the working directory when project trust is on, and trust is a global setting. A jail whose occupant can author the extension that loads next run is not confined. |
+| `$HOME` | `<stateDir>/jails/<room>/home`, mode 0700 | Bridge-owned and outside the root, so the session cannot write its own `~/.ssh/config` or `~/.gitconfig`. Inside a jail, `~/.ssh` does not exist. |
+| `PI_CODING_AGENT_DIR` | the real `<piHome>/agent` | pi needs its settings, skills, `AGENTS.md` and credentials; this is the read-only exception. Read-only because that directory is also where extensions live — writable, a jailed session could install code the host pi loads. |
+| `~/.agents` | read-only, when present | The other place skills are kept. Refusing it would only make the agent worse. |
+| `PI_COURIER_JAIL_ROOT` | the bound directory | Set by the bridge; the guard falls back to its own working directory, which the bridge sets to the same value, so root and binding cannot disagree. |
+| `AGENTS.md` | written when arming if absent, never overwritten | Context-file discovery walks parent directories and needs no trust, so a jail under `/srv` inherits `/srv/AGENTS.md`. Arming gives the room instructions of its own. |
 
-That sentence is not decoration. pi's own security documentation is explicit that the
-working folder "does not prevent commands from accessing other paths available to the Pi
-process", so:
+The three files split by concern: `rules.ts` decides (pure, unit-tested),
+`guard.ts` adapts pi's `tool_call` event to that decision, `spawn.ts` builds the
+environment. The guard refuses a path below the root, the jail home, or the
+read-only set — resolved first: `~` against the *jail* home, `..` collapsed,
+symlinks followed with `realpath`, a path that does not exist yet judged at its
+nearest existing ancestor. Writes go to the root and the jail home only.
 
-- **binding alone** buys a separate process, a separate session and a separate default
-  directory. It stops the accidental `~/secrets` edit and makes each channel's work
-  separately visible in the logs;
-- **the guard** will refuse tool calls that name a path outside the root. It constrains
-  tool calls, not the process: it stops the accident, the confused guest and the injected
-  instruction, and it does not stop a determined model that finds a tool outside the
-  guard's reach;
-- **a real boundary** — the jailed instance inside a container with only that directory
-  mounted — is what stands between a hostile channel member and this machine. That is the
-  documented direction (pi describes Docker/OpenShell/Gondolin for exactly this) and it
-  reuses everything above.
+The read-only system set is deliberately not `/etc`, `/proc` and `/sys`
+wholesale. It names what tools need (`resolv.conf`, certificates, `/dev/null`)
+because `/etc/ssh/ssh_config` is recon and `/proc/<pid>/environ` is where the
+bridge's own access token sits.
+
+Bash is judged on the paths a command names — absolute, `~`, `$HOME`, `..` —
+which is what an accident and a prompted-into-it mistake look like. It is a
+recogniser, not a parser: `$(printf … | base64 -d)/etc/passwd` defeats any token
+scan. Three levels, and the middle one is what ships:
+
+- **binding alone** — separate process, session and default directory; stops the
+  accidental `~/secrets` edit;
+- **the guard** — refuses tool calls that reach outside, with the reason visible
+  on the bridge's log (`[pi-courier jail] blocked …`);
+- **a container per jail** — the only thing that stands between a hostile channel
+  member and this machine: a stdio shim pointing `cliPath` at `podman run -i --rm`
+  with the jail bind-mounted at the same path, one quadlet unit per jail, no docker
+  socket inside. Provider credentials stay a host-side secret problem no mount list
+  solves; ssh inside a jail is a scoped https token or one dedicated deploy key
+  placed in that jail's home, never `~/.ssh`.
 
 ## Where the root comes from
 
-`PI_JAIL_ROOT` was the design's first idea and is **not a pi variable** — pi knows no
-jail, sandbox or path-root variable (checked against its environment-variable list, the
-whole documentation tree and its CLI surface), and inventing a name that looks like one
-would read as if pi understood it. The root the guard enforces is therefore read from the
-child process's working directory, captured when the extension loads:
+The root is the instance's working directory, captured when the extension loads;
+`PI_COURIER_JAIL_ROOT` makes it explicit and is namespaced so it cannot be
+mistaken for a pi variable — pi knows no jail, sandbox or path-root variable
+(checked against its environment-variable list, its documentation tree and its
+CLI surface).
 
-- the bridge already sets that directory when it spawns the instance, so the enforced root
-  and the bound directory are the same value by construction — one cannot be forgotten,
-  renamed or left pointing at yesterday's path;
-- capturing it at load matters: the extension runs inside the pi process, so a `bash` tool
-  running `cd /etc` changes its own subprocess, not the host's directory, and pi offers no
-  `/cd` to move the session (both checked);
-- if a root different from the working directory is ever genuinely needed, the override is
-  `PI_COURIER_JAIL_ROOT`, namespaced so it cannot be mistaken for pi's own — `RpcClient`
-  accepts `args` and `env`, and the bridge already merges environment variables for the
-  proxy feature.
+- the bridge sets that directory when spawning, so the enforced root and the bound
+  directory are one value by construction;
+- capturing at load matters: a `bash` tool running `cd /etc` moves its own
+  subprocess, not the extension host, and pi has no `/cd`;
+- the extension loads with `-e <path>`, never from the jailed directory.
 
-The extension is loaded with `-e <path>` (a CLI extension), not from the jailed directory:
-project-local extensions are gated on project trust, and, more decisively, configuration
-that lives inside a jailed directory is configuration the jailed session can edit. Security
-settings do not get stored where the confined party has write access.
+## Proof the guard is live
+
+Rules and wiring are unit-tested; against a real pi (v1.27+) the extension loads
+and announces itself on stderr, which the bridge forwards to its log:
+
+```console
+$ PI_COURIER_JAIL_ROOT=/tmp/jailproof PI_COURIER_JAIL_HOME=/tmp/jailhome \
+    pi --mode rpc -e dist/jail/guard.js --no-approve
+[pi-courier jail] guarding /tmp/jailproof (home /tmp/jailhome)
+```
 
 ## Test anchors
 
@@ -123,3 +140,7 @@ settings do not get stored where the confined party has write access.
 | same — the four `refuses a …` cases + `refuses a second guarded room over one directory` | the directory rules and the one-jail-one-directory rule |
 | same — `refuses /pmctl rm on a guarded project` | no orphan jails |
 | `tests/config.test.ts` — `keeps a guarded project binding across save and reload` | a jail that survives a restart |
+| `tests/jail-rules.test.ts` (17) | traversal, symlink out, `~` against the jail home, sibling-prefix escape, the bash shapes, the sensitive half of `/etc` refused |
+| `tests/jail-spawn.test.ts` (6) | `-e` + `--no-approve` + jail env on a guarded spawn, an unguarded spawn byte-identical, one home per room |
+| `tests/jail-guard.test.ts` (4) | the compiled extension blocks an outside read, allows inside work, keeps the agent directory readable and unwritable, and still blocks an unknown tool |
+| `tests/pmctl-controller.test.ts` — `guard on flips the flag and writes a starting AGENTS.md`, `never overwrites an AGENTS.md someone already wrote` | a jail gets instructions of its own without clobbering anyone's |

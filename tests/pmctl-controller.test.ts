@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { homedir as osHomedir, tmpdir } from "node:os";
 import { promisify } from "node:util";
@@ -1195,13 +1195,24 @@ describe("PmctlController share & wt (spec #299 票09)", () => {
     expect(replies.at(-1)).toContain("已被护栏占用");
   });
 
-  it("guard on flips the flag on the binding and names the restart", async () => {
+  it("guard on flips the flag and writes a starting AGENTS.md", async () => {
     const jail = mkdtempSync(join(tmpDir, "jail-"));
     pm.registerProject("!room:server", resolve(jail), "proj");
     await handle("/pmctl guard !room:server on");
     expect(pm.setProjectGuard).toHaveBeenCalledWith("!room:server", true);
     expect(replies.at(-1)).toContain("已 jail 在");
     expect(replies.at(-1)).toContain("路径护栏");
+    // pi reads context files from parent directories without project trust, so a
+    // jail without its own AGENTS.md inherits whatever owns /srv.
+    expect(existsSync(join(resolve(jail), "AGENTS.md"))).toBe(true);
+  });
+
+  it("guard on never overwrites an AGENTS.md someone already wrote", async () => {
+    const jail = mkdtempSync(join(tmpDir, "jail-"));
+    writeFileSync(join(resolve(jail), "AGENTS.md"), "mine\n", "utf8");
+    pm.registerProject("!room:server", resolve(jail), "proj");
+    await handle("/pmctl guard !room:server on");
+    expect(readFileSync(join(resolve(jail), "AGENTS.md"), "utf8")).toBe("mine\n");
   });
 
   it("guard off is always allowed and keeps the instance", async () => {

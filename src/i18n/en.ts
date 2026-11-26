@@ -697,7 +697,7 @@ const en: Record<MessageKey, string> = {
   "pmctl.unbind.usage": "Usage: /pmctl unbind <#alias|room ID|project name> (the directory and its files are left alone)",
   "pmctl.unbind.done": "✅ Released {name} — its own process is stopped, the room is back on the default instance\n• directory left untouched: {workdir}",
   "pmctl.guard.usage": "Usage: /pmctl guard <#alias|room ID|project name> <on|off>",
-  "pmctl.guard.on": "🔒 {name} is jailed in {workdir}\n• the instance is restarted; from the next message on, tool calls reaching outside are refused\n• it is the path guard that refuses them, not the working directory",
+  "pmctl.guard.on": "🔒 {name} is jailed in {workdir}\n• from the next message on, tool calls reaching outside that directory are refused (AGENTS.md: {instructions}); the guard lives in the instance, not in the working directory",
   "pmctl.guard.off": "🔓 {name} is no longer jailed (it keeps its own instance in {workdir})",
   "pmctl.pathEscape": "❌ Path escapes the project root: {path}\nUse a name inside the project root; for a location elsewhere, pass an absolute path or one starting with ~/",
   "pmctl.mv.done":

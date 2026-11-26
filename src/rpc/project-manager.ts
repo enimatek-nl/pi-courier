@@ -17,6 +17,7 @@ import { errorMessage } from "../errors.js";
 import { t } from "../i18n/index.js";
 import { logger } from "../logger.js";
 import { projectLabelOf } from "../project-labels.js";
+import { guardExtensionPath, jailSpawnOptions } from "../jail/spawn.js";
 import type { ProjectConfig } from "../types.js";
 import { setModelByRef } from "./model-switch.js";
 import { PiRpc, type PiRpcOptions } from "./pi-rpc.js";
@@ -207,11 +208,21 @@ export class ProjectManager {
     args.push("--session-dir", projectSessionDir);
 
     const label = projectLabelOf(entry);
+
+    // A guarded binding gets the path guard and a jail of its own
+    // (docs/specs/channel-jail.md). Three parts, all of them load-bearing:
+    //   -e <guard>      the extension that refuses tool calls reaching outside
+    //   --no-approve    never load project resources from inside the jail: a
+    //                   session that can author `.pi/extensions/evil.ts` in the
+    //                   directory it controls gets it executed at the next spawn
+    //   jail env        $HOME, the agent-directory exception, and the roots
+    const jail = entry.guard ? jailSpawnOptions(entry.workdir, roomId) : undefined;
     const rpc = this.newRpc({
       ...this.baseOptions,
       cwd: entry.workdir,
-      args,
+      args: entry.guard ? [...args, "-e", guardExtensionPath(), "--no-approve"] : args,
       label,
+      ...(jail ? { jail } : {})
     });
 
     const listener: RpcEventListener = (event) => {

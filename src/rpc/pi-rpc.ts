@@ -39,6 +39,14 @@ export const BASH_TIMEOUT_MS_DEFAULT = BASH_TIMEOUT_MINUTES_DEFAULT * 60_000;
 export interface PiRpcOptions {
   /** Absolute path to pi's dist/cli.js (default: config.cliPath ← PI_CLI_PATH env, then local node_modules, then `which pi`) */
   cliPath?: string;
+  /**
+   * Jail for this instance (docs/specs/channel-jail.md). Set only for a guarded
+   * binding: it rewrites the child's `$HOME` to a bridge-owned directory (so a
+   * model asking for `~/.ssh` asks for a file that does not exist there), points
+   * `PI_CODING_AGENT_DIR` back at the real pi configuration (pi needs its own
+   * settings, skills and credentials), and hands the path guard its roots.
+   */
+  jail?: { home: string; allow: string[]; agentDir: string };
   /** Working directory for the agent (affects bash tool, project context) */
   cwd?: string;
   /** Extra CLI args, e.g. ["--session-dir", "/path"] */
@@ -418,6 +426,24 @@ export class PiRpc {
       fs.mkdirSync(this.options.cwd, { recursive: true });
     }
 
+    // Jail environment, computed once per spawn because the roots must not move
+    // underneath a running session. The jail home is 0700 and bridge-owned; the
+    // agent directory is passed as a read-only exception (the guard refuses
+    // writes to it) because pi cannot start without its own settings, skills and
+    // credentials.
+    const jailEnv = this.options.jail
+      ? {
+          HOME: this.options.jail.home,
+          PI_COURIER_JAIL_HOME: this.options.jail.home,
+          PI_COURIER_JAIL_ROOT: this.options.cwd ?? process.cwd(),
+          PI_COURIER_JAIL_ALLOW: this.options.jail.allow.join(path.delimiter),
+          PI_CODING_AGENT_DIR: this.options.jail.agentDir
+        }
+      : undefined;
+    if (this.options.jail) {
+      fs.mkdirSync(this.options.jail.home, { recursive: true, mode: 0o700 });
+    }
+
     const cliPath = this.options.cliPath ?? (await PiRpc.resolveCliPath());
     // Fail with a human-readable message instead of pi's SyntaxError from a
     // missing Node 22 builtin (pi 1.0+ hard-requires Node >=22.19). This must
@@ -431,8 +457,9 @@ export class PiRpc {
       cwd: this.options.cwd,
       args: this.options.args,
       // 无代理时键都不出现:上游 spawn 以 {...process.env, ...options.env}
-      // 合成子进程环境,少传 env 即与旧版逐键一致(现状直连)。
-      ...(proxyEnv ? { env: proxyEnv } : {}),
+      // 合成子进程环境,少传 env 即与旧版逐键一致(现状直连)。jail 环境与代理
+      // 环境在此合并(护栏变量为 jail 独有,两者键不相交)。
+      ...(proxyEnv || jailEnv ? { env: { ...proxyEnv, ...jailEnv } } : {}),
     });
 
     await client.start();

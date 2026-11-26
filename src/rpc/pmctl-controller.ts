@@ -14,6 +14,7 @@
 
 import { existsSync } from "node:fs";
 import * as os from "node:os";
+import * as fs from "node:fs";
 import * as path from "node:path";
 import type { ChallengeAuth } from "../auth/challenge-auth.js";
 import { ClaimLedger } from "../collab/claim-ledger.js";
@@ -680,10 +681,18 @@ export class PmctlController {
       }
     }
     await this.opts.projectManager.setProjectGuard(roomId, state === "on");
+    // Arming a jail also gives it instructions of its own. pi reads context files
+    // from the working directory *and its parents* without requiring project
+    // trust, so a jail at /srv/jail/room inherits /srv/AGENTS.md, /AGENTS.md —
+    // whoever's machine that is. Writing a starting file is what makes the
+    // instructions in a shared channel's session ones you chose. Never
+    // overwriting: an existing AGENTS.md is someone's decision.
+    const instructions = state === "on" ? armJailInstructions(entry.workdir) : "kept";
     await reply(
       t(state === "on" ? "pmctl.guard.on" : "pmctl.guard.off", {
         name: projectLabelOf(entry),
-        workdir: entry.workdir
+        workdir: entry.workdir,
+        instructions
       })
     );
   }
@@ -1045,5 +1054,37 @@ export class PmctlController {
     } catch (err) {
       await reply(`${renamed}${avatarNote}${t("pmctl.rename.roomFailed", { message: errorMessage(err) })}`);
     }
+  }
+}
+
+/**
+ * Drop a starting `AGENTS.md` into a directory being armed as a jail.
+ *
+ * Returns the word the reply reports: "written", "kept" (a file already stands
+ * there, or this is a disarm), or "unwritable" when the directory refuses it —
+ * worth saying out loud, because a jail whose instructions come from a parent
+ * directory is sharing behaviour with whatever owns that parent.
+ */
+function armJailInstructions(workdir: string): "written" | "kept" | "unwritable" {
+  const target = path.join(workdir, "AGENTS.md");
+  if (fs.existsSync(target)) return "kept";
+  try {
+    fs.writeFileSync(
+      target,
+      [
+        "# Instructions for this workspace",
+        "",
+        "This directory is a jailed workspace: an assistant works in it on behalf of",
+        "people in a chat room, from a process that is confined to it.",
+        "",
+        "Write the instructions for that room here. Anything in a parent directory",
+        "would apply to every project on this machine, and this file applies here only.",
+        ""
+      ].join("\n"),
+      "utf8"
+    );
+    return "written";
+  } catch {
+    return "unwritable";
   }
 }
